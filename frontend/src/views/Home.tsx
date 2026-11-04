@@ -6,7 +6,7 @@ interface Props {
   initialCode: string;
   session: Session | null;
   onCreate: (name: string) => void;
-  onJoin: (name: string, code: string) => void;
+  onJoin: (name: string, code: string, spectator?: boolean) => void;
   onRejoin: (s: Session) => void;
   onPractice: () => void;
   onGuide: () => void;
@@ -109,6 +109,15 @@ export function Home({ initialCode, session, onCreate, onJoin, onRejoin, onPract
             onChange={(e) => setCode(e.target.value.toUpperCase())}
           />
           <button className="btn big" type="submit">Gabung</button>
+          <button className="btn" type="button" onClick={() => {
+            const n = cleanName();
+            if (!n) return;
+            if (!/^[A-Za-z0-9]{5}$/.test(code.trim())) {
+              setErr('Kode room terdiri dari 5 huruf/angka.');
+              return;
+            }
+            onJoin(n, code.trim().toUpperCase(), true);
+          }}>Tonton saja</button>
         </form>
         {err && <div className="err-box">{err}</div>}
         <div className="row">

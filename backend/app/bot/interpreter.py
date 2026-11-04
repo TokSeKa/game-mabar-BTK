@@ -285,9 +285,11 @@ class Interpreter:
         for st in stmts:
             try:
                 self.charge()
+                if self.trace is not None and isinstance(st, ast.If):
+                    self._record(st, env)          # if: catat sebelum kondisinya diperiksa
                 self._stmt[type(st)](st, env)
-                if self.trace is not None and len(self.trace) < 600 and not isinstance(st, ast.FunctionDef):
-                    self._record(st, env)
+                if self.trace is not None and not isinstance(st, (ast.FunctionDef, ast.If, ast.For, ast.While)):
+                    self._record(st, env)          # statement biasa: catat setelah dijalankan
             except (_Return, _Break, _Continue):
                 raise
             except BotError as e:
@@ -300,6 +302,8 @@ class Interpreter:
                 raise err from None
 
     def _record(self, st: ast.stmt, env: Env) -> None:
+        if self.trace is None or len(self.trace) >= 600:
+            return
         vars_ = {}
         for k, v in env.vars.items():
             if isinstance(v, (UserFunction, LibFunction)):
@@ -316,6 +320,7 @@ class Interpreter:
         if self.trace is not None and len(self.trace) < 600:
             self._record(node, env)
             self.trace[-1]["kembali"] = to_text(value, 120, top=False)
+            self.trace[-1]["fungsi"] = env.fname or self.trace[-1]["fungsi"]
         raise _Return(value)
 
     def s_assign(self, node: ast.Assign, env: Env) -> None:
@@ -344,6 +349,8 @@ class Interpreter:
         broke = False
         for item in self.iterate(self.eval(node.iter, env)):
             self.assign(node.target, item, env)
+            if self.trace is not None:
+                self._record(node, env)            # setiap putaran, setelah variabel loop diisi
             try:
                 self.exec_block(node.body, env)
             except _Break:
@@ -358,6 +365,8 @@ class Interpreter:
         broke = False
         while self.eval(node.test, env):
             self.charge()
+            if self.trace is not None:
+                self._record(node, env)
             try:
                 self.exec_block(node.body, env)
             except _Break:

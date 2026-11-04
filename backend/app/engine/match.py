@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -10,6 +11,7 @@ from ..bot.interpreter import Limits
 from ..bot.library import RoundView
 from ..bot.runner import run_bot
 from ..bot.validator import compile_bot
+from .events import EVENT_BY_ID, apply_event, event_info, hide_choices, resolve_event
 from .rules import BATU, SENJATA, resolve_round
 
 #: kalau bot error sebanyak ini berturut-turut, bot dimatikan dan otomatis memilih BATU
@@ -23,6 +25,7 @@ class MatchSettings:
     hp_kalah: int = 100
     ronde_maks: int = 100
     ingatan: int = 10
+    event: str = "normal"
 
     LIMITS = {
         "hp_awal": (100, 100_000),
@@ -44,10 +47,17 @@ class MatchSettings:
                 v = getattr(base, key)
             vals[key] = max(lo, min(hi, v))
         vals["hp_kalah"] = min(vals["hp_kalah"], vals["hp_awal"])
-        return cls(**vals)
+        ev = data.get("event", "normal")
+        return cls(**vals, event=ev if ev in EVENT_BY_ID else "normal")
 
-    def to_dict(self) -> dict[str, int]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    def effective(self, rnd: random.Random | None = None) -> tuple["MatchSettings", dict[str, Any]]:
+        """Aturan yang benar-benar dipakai setelah event diterapkan ('acak' diundi dengan ``rnd``)."""
+        ev = resolve_event(self.event, rnd)
+        vals = apply_event({k: getattr(self, k) for k in self.LIMITS}, ev)
+        return MatchSettings(**vals), event_info(ev, kejutan=self.event == "acak")
 
 
 @dataclass
@@ -56,8 +66,12 @@ class BotEntry:
     code: str
 
 
-def run_match(entries: list[BotEntry], settings: MatchSettings, limits: Limits | None = None) -> dict[str, Any]:
+def run_match(entries: list[BotEntry], settings: MatchSettings, limits: Limits | None = None,
+              seed: int | None = None, effective: bool = False) -> dict[str, Any]:
     """Jalankan match. ``entries`` sudah dalam urutan masuk room.
+
+    Event pada ``settings`` diterapkan dulu (event 'acak' diundi dari ``seed``), kecuali ``effective=True``
+    yang berarti ``settings`` sudah berupa aturan efektif (dipakai turnamen supaya semua match sama).
 
     Hasilnya berisi:
 
@@ -66,6 +80,11 @@ def run_match(entries: list[BotEntry], settings: MatchSettings, limits: Limits |
     * ``ranking``, ``winners``, ``reason``, ``elim_round``
     """
     limits = limits or Limits()
+    if effective:
+        ev = event_info(settings.event)
+    else:
+        settings, ev = settings.effective(random.Random(seed))
+    kabut = settings.event == "kabut"
     n = len(entries)
     if n < 2:
         raise ValueError("butuh minimal 2 pemain")
@@ -92,6 +111,8 @@ def run_match(entries: list[BotEntry], settings: MatchSettings, limits: Limits |
         if len(alive) <= 1:
             break
         window = history[-settings.ingatan:]
+        if kabut:
+            window = hide_choices(window)
         hp_names = {names[i]: hp[i] for i in range(n)}
         choices: dict[int, str] = {}
         for i in alive:
@@ -164,6 +185,7 @@ def run_match(entries: list[BotEntry], settings: MatchSettings, limits: Limits |
     reason = "last_standing" if len(alive_final) == 1 else "max_rounds"
     return {
         "settings": settings.to_dict(),
+        "event": ev,
         "names": names,
         "rounds": rounds,
         "logs": logs,

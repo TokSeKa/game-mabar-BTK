@@ -6,8 +6,9 @@ from typing import Any
 
 from ..bot.library import RoundView, make_library
 from ..bot.templates import TEMPLATES
+from ..engine.events import EVENTS, apply_event, event_info, hide_choices, resolve_event
 from ..engine.rules import SENJATA, resolve_round
-from .base import ActionError, Game, Setting
+from .base import ActionError, Game, Setting, rng
 
 
 class SuitLive(Game):
@@ -25,6 +26,8 @@ class SuitLive(Game):
         Setting("hp_kalah", "HP hilang saat kalah", "int", 100, 1, 100000),
         Setting("ronde_maks", "Batas ronde", "int", 40, 1, 300),
         Setting("ingatan", "Ingatan bot (ronde)", "int", 10, 1, 50),
+        Setting("event", "Mode event", "pilihan", "normal", pilihan=[[e["id"], e["nama"]] for e in EVENTS],
+                ket="Variasi aturan: taruhan ganda, pikun, kilat, darah tipis, kabut, atau kejutan acak."),
     ]
     templates = [{"id": t["id"], "nama": t["nama"], "ket": t["ket"], "kode": t["kode"]} for t in TEMPLATES]
     aturan = """
@@ -32,6 +35,8 @@ class SuitLive(Game):
 - Setiap pemain yang senjatanya dikalahkan kehilangan *HP hilang saat kalah* (default 100). HP itu dikumpulkan lalu dibagi rata ke golongan yang mengalahkannya. Sisa pembagian: +1 ke pemenang ber-HP terendah dulu.
 - **Sirkular**: kalau ketiga senjata keluar, setiap golongan sekaligus menang atas satu golongan dan kalah dari golongan lain.
 - HP 0 = gugur. Yang terakhir hidup menang, atau HP terbanyak saat batas ronde.
+- **Mode event** (diatur host): *Taruhan Ganda* (HP kalah ×2), *Pikun* (ingatan bot 3 ronde), *Kilat* (maks 30 ronde),
+  *Darah Tipis* (HP awal 30%), *Kabut* (pilihan tiap pemain tidak terlihat, hanya jumlah per senjata), *Kejutan* (salah satunya diundi).
 """
     format_aksi = "Kembalikan teks `BATU`, `GUNTING`, atau `KERTAS` dari `def pilih():` (sama persis dengan bot Suit Bot Arena)."
     format_info = """Bot Suit memakai library Suit Bot Arena: `ronde()`, `hp_saya()`, `lawan()`, `jumlah_terakhir()`, `pilihan_terakhir(nama)`,
@@ -39,8 +44,18 @@ class SuitLive(Game):
 `ronde`, `ronde_maks`, `hp` (dict nama → HP), dan `riwayat` (ronde-ronde terakhir sebanyak ingatan)."""
 
     def init(self, cfg: dict[str, Any], names: list[str], seed: int) -> dict[str, Any]:
-        return {"seed": seed, "names": names, "cfg": cfg, "hp": [cfg["hp_awal"]] * len(names), "ronde": 1,
-                "history": [], "elim": {}}
+        s = {"seed": seed, "names": names, "ronde": 1, "history": [], "elim": {}}
+        ev = resolve_event(cfg.get("event", "normal"), rng(s, "event"))
+        s["cfg"] = apply_event({k: cfg[k] for k in ("hp_awal", "hp_kalah", "ronde_maks", "ingatan")}, ev)
+        s["event"] = event_info(ev, kejutan=cfg.get("event") == "acak")
+        s["hp"] = [s["cfg"]["hp_awal"]] * len(names)
+        return s
+
+    def _kabut(self, s: dict[str, Any]) -> bool:
+        return s["cfg"].get("event") == "kabut"
+
+    def _visible(self, s: dict[str, Any], entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return hide_choices(entries) if self._kabut(s) else entries
 
     def _alive(self, s: dict[str, Any]) -> list[int]:
         return [i for i, h in enumerate(s["hp"]) if h > 0]
@@ -50,9 +65,11 @@ class SuitLive(Game):
 
     def public(self, s: dict[str, Any]) -> dict[str, Any]:
         n = s["names"]
+        last = self._visible(s, s["history"][-1:])
         return {"ronde": s["ronde"], "ronde_maks": s["cfg"]["ronde_maks"], "hp_awal": s["cfg"]["hp_awal"],
                 "hp_kalah": s["cfg"]["hp_kalah"], "hp": {n[i]: h for i, h in enumerate(s["hp"])},
-                "riwayat": s["history"][-s["cfg"]["ingatan"]:], "terakhir": s["history"][-1] if s["history"] else None}
+                "riwayat": self._visible(s, s["history"][-s["cfg"]["ingatan"]:]), "terakhir": last[0] if last else None,
+                "event": s.get("event")}
 
     def validate(self, s: dict[str, Any], p: int, a: Any) -> str:
         if isinstance(a, str) and a.strip().lower() in SENJATA:
@@ -81,7 +98,7 @@ class SuitLive(Game):
         }
         s["history"].append(entry)
         s["ronde"] += 1
-        return [{"jenis": "ronde", **entry}]
+        return [{"jenis": "ronde", **self._visible(s, [entry])[0]}]
 
     def over(self, s: dict[str, Any]) -> bool:
         return s["ronde"] > s["cfg"]["ronde_maks"] or len(self._alive(s)) <= 1
@@ -97,6 +114,6 @@ class SuitLive(Game):
         view = RoundView(me=n[p], ronde=s["ronde"], hp_awal=s["cfg"]["hp_awal"], hp_kalah=s["cfg"]["hp_kalah"],
                          ronde_maks=s["cfg"]["ronde_maks"], ingatan=s["cfg"]["ingatan"], names=list(n),
                          hp={n[i]: h for i, h in enumerate(s["hp"])},
-                         history=[{k: h[k] for k in ("ronde", "jumlah", "pilihan", "perubahan", "hp")}
-                                  for h in s["history"][-s["cfg"]["ingatan"]:]])
+                         history=self._visible(s, [{k: h[k] for k in ("ronde", "jumlah", "pilihan", "perubahan", "hp")}
+                                                   for h in s["history"][-s["cfg"]["ingatan"]:]]))
         return make_library(view)

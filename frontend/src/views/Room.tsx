@@ -5,12 +5,14 @@ import { Replay } from '../replay/Replay';
 import { ROBOT } from '../replay/assets';
 import { RoomSocket, type ConnStatus } from '../socket';
 import { KEYS, remove, save, type SavedBot, type Session } from '../storage';
-import type { BotErrorInfo, MatchResultMsg, MatchSettings, RoomState } from '../types';
+import { getToken } from '../trading/api';
+import type { BotErrorInfo, MatchResultMsg, MatchSettings, RoomState, TournamentResult } from '../types';
 import { BotLog } from './BotLog';
+import { DebugPanel, EventName, EventSelect, RatingList, ReactionBar, ReactionLayer, TournamentView, useReactions } from './SuitExtras';
 
 export type RoomEntry =
   | { action: 'create'; name: string }
-  | { action: 'join'; name: string; code: string }
+  | { action: 'join'; name: string; code: string; spectator?: boolean }
   | { action: 'rejoin'; session: Session };
 
 interface Props {
@@ -47,7 +49,12 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
   const [replayKey, setReplayKey] = useState(0);
   const [autoplay, setAutoplay] = useState(true);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
-  const [tab, setTab] = useState<'bot' | 'replay'>('bot');
+  const [tab, setTab] = useState<'bot' | 'replay' | 'turnamen'>('bot');
+  const [tour, setTour] = useState<TournamentResult | null>(null);
+  const [ronde, setRonde] = useState(1);
+  const [reacts, addReact] = useReactions();
+  const addReactRef = useRef(addReact);
+  addReactRef.current = addReact;
   const [draft, setDraft] = useState<MatchSettings | null>(null);
   const [check, setCheck] = useState<CheckState>({ state: 'checking' });
   const sessionRef = useRef<Session | null>(entry.action === 'rejoin' ? entry.session : null);
@@ -61,9 +68,10 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
   useEffect(() => {
     const hello = () => {
       const s = sessionRef.current;
-      if (s) return { type: 'rejoin', code: s.code, player_id: s.player_id, token: s.token };
-      if (entry.action === 'create') return { type: 'create_room', name: entry.name };
-      if (entry.action === 'join') return { type: 'join_room', code: entry.code, name: entry.name };
+      const akun_token = getToken();
+      if (s) return { type: 'rejoin', code: s.code, player_id: s.player_id, token: s.token, akun_token };
+      if (entry.action === 'create') return { type: 'create_room', name: entry.name, akun_token };
+      if (entry.action === 'join') return { type: 'join_room', code: entry.code, name: entry.name, spectator: !!entry.spectator, akun_token };
       return null;
     };
     const onMessage = (msg: Record<string, any>) => {
@@ -103,6 +111,13 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
         case 'code_revealed':
           setRevealed((r) => ({ ...r, [msg.player_id]: msg.code }));
           break;
+        case 'reaction':
+          addReactRef.current(msg.name, msg.emoji);
+          break;
+        case 'tournament_result':
+          setTour(msg as TournamentResult);
+          if (msg.baru) setTab('turnamen');
+          break;
         case 'error':
           if (!sessionRef.current || /Sesi lama/.test(msg.message)) {
             remove(KEYS.session);
@@ -140,6 +155,7 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
   }, []);
 
   const mePlayer = room?.players.find((p) => p.id === me) ?? null;
+  const iSpectate = !!room && !mePlayer && !!room.penonton?.some((p) => p.id === me);
   const isHost = !!room && room.host_id === me;
   const dirty = serverBot?.code !== bot.code;
   const readyCount = room ? room.players.filter((p) => p.ready && p.bot_ok && p.online).length : 0;
@@ -201,7 +217,9 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
           Salin link undangan
         </button>
         <span className={`status-pill ${conn === 'open' ? 'ok' : 'warn'}`}>{conn === 'open' ? 'Tersambung' : 'Menyambung ulang…'}</span>
+        <EventName id={room.settings.event} />
         <span className="spacer" />
+        <ReactionBar onSend={(e) => send({ type: 'react', emoji: e })} />
         <button className="btn small danger" type="button" onClick={leave}>Keluar room</button>
       </div>
 
@@ -216,7 +234,7 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
                   <span className="pn">
                     {p.name}
                     {p.id === me ? ' (kamu)' : ''}
-                    <small>{p.online ? `${p.wins} menang dari ${p.matches} match` : 'offline'}</small>
+                    <small>{p.online ? `${p.wins} menang dari ${p.matches} match` : 'offline'}{p.akun ? ` · akun ${p.akun}` : ''}</small>
                   </span>
                   <span className="tags">
                     {p.is_host && <span className="tag-mini host">host</span>}
@@ -228,6 +246,13 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
                 </li>
               ))}
             </ul>
+            {!!room.penonton?.length && <p className="hint">Penonton: {room.penonton.map((x) => x.name + (x.id === me ? ' (kamu)' : '')).join(', ')}</p>}
+            {iSpectate && (
+              <button className="btn" type="button" disabled={running || room.players.length >= 8} onClick={() => send({ type: 'play' })}>Ambil kursi pemain</button>
+            )}
+            {mePlayer && !running && (
+              <button className="btn small" type="button" onClick={() => send({ type: 'spectate' })}>Jadi penonton saja</button>
+            )}
           </div>
 
           <div className="panel">
@@ -248,6 +273,7 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
                   />
                 </label>
               ))}
+              <EventSelect value={draft.event ?? 'normal'} disabled={!isHost || running} onChange={(v) => setDraft({ ...draft, event: v })} />
             </div>
             {isHost ? (
               <button
@@ -270,7 +296,13 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
                 <button className="btn primary big" type="button" disabled={running || readyCount < 2} onClick={() => send({ type: 'start_match' })}>
                   Mulai match ({readyCount} siap)
                 </button>
-                <p className="hint">Yang ikut hanya pemain online dengan bot valid yang sudah menekan "Siap". Minimal 2.</p>
+                <button className="btn" type="button" disabled={running || readyCount < 3} onClick={() => send({ type: 'start_tournament' })}>
+                  🏆 Mulai turnamen 1 lawan 1
+                </button>
+                <p className="hint">
+                  Yang ikut hanya pemain online dengan bot valid yang sudah menekan "Siap". Match biasa minimal 2;
+                  turnamen minimal 3 (setiap pasangan bertanding 1 lawan 1).
+                </p>
               </>
             ) : (
               <p className="hint">Menunggu host memulai. {readyCount} pemain sudah siap.</p>
@@ -289,9 +321,15 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
             <button type="button" role="tab" aria-selected={tab === 'replay'} onClick={() => setTab('replay')} disabled={!result}>
               Replay match terakhir
             </button>
+            {tour && <button type="button" role="tab" aria-selected={tab === 'turnamen'} onClick={() => setTab('turnamen')}>Turnamen</button>}
           </div>
+          {iSpectate && tab === 'bot' && (
+            <div className="panel"><p className="hint">Kamu masuk sebagai penonton: replay match dan turnamen tetap bisa ditonton, dan kamu bisa mengirim reaksi.
+              Tekan "Ambil kursi pemain" untuk ikut bertanding.</p></div>
+          )}
 
-          <div hidden={tab !== 'bot'}>
+          {tab === 'turnamen' && tour && <TournamentView t={tour} me={me} />}
+          <div hidden={tab !== 'bot' || iSpectate}>
             <BotEditor bot={bot} onChange={setBot} onCheck={setCheck}>
               <button className="btn" type="button" onClick={submitBot} disabled={running && !!mePlayer?.ready}>
                 {dirty ? 'Kirim bot ke room' : 'Bot sudah terkirim ✓'}
@@ -313,7 +351,9 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
 
           {tab === 'replay' && result && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <Replay key={replayKey} match={result.match} myIndex={myIndex} autoplay={autoplay} startAtEnd={!autoplay} />
+              <Replay key={replayKey} match={result.match} myIndex={myIndex} autoplay={autoplay} startAtEnd={!autoplay} onRound={setRonde} />
+              <RatingList ratings={result.match.ratings} players={result.match.players} />
+              {iPlayed && myIndex != null && <DebugPanel match={result.match} myIndex={myIndex} code={bot.code} ronde={ronde} />}
               <div className="two-col">
                 {iPlayed && result.my_log ? <BotLog log={result.my_log} /> : <div className="panel"><p className="hint">Kamu tidak ikut match ini.</p></div>}
                 <div className="panel">
@@ -340,6 +380,7 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
           )}
         </section>
       </div>
+      <ReactionLayer items={reacts} />
     </div>
   );
 }

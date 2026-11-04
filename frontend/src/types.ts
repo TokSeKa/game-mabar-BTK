@@ -5,6 +5,21 @@ export interface MatchSettings {
   hp_kalah: number;
   ronde_maks: number;
   ingatan: number;
+  /** mode event: normal | ganda | pikun | kilat | tipis | kabut | acak */
+  event?: string;
+}
+
+export interface EventInfo {
+  id: string;
+  nama: string;
+  ket: string;
+  kejutan?: boolean;
+}
+
+export interface RatingChange {
+  lama: number;
+  baru: number;
+  delta: number;
 }
 
 export interface PairData {
@@ -47,6 +62,9 @@ export interface MatchData {
   reason: 'last_standing' | 'max_rounds';
   elim_round: Record<string, number>;
   final_hp: number[];
+  event?: EventInfo | null;
+  /** id pemain → perubahan rating liga (hanya pemain yang masuk akun) */
+  ratings?: Record<string, RatingChange> | null;
 }
 
 export interface BotErrorInfo {
@@ -74,6 +92,8 @@ export interface PlayerPublic {
   wins: number;
   matches: number;
   is_host: boolean;
+  spectator?: boolean;
+  akun?: string | null;
 }
 
 export interface RoomState {
@@ -83,7 +103,59 @@ export interface RoomState {
   settings: MatchSettings;
   match_count: number;
   players: PlayerPublic[];
+  penonton?: { id: string; name: string; online: boolean }[];
   last_match_id: string | null;
+  last_tournament_id?: string | null;
+}
+
+export interface TournamentRow {
+  index: number;
+  poin: number;
+  menang: number;
+  seri: number;
+  kalah: number;
+  selisih_hp: number;
+}
+
+export interface TournamentMatch {
+  a: number;
+  b: number;
+  pemenang: number | null;
+  hp: [number, number];
+  ronde: number;
+  alasan: string;
+  match: MatchData;
+}
+
+export interface TournamentResult {
+  type: 'tournament_result';
+  id: string;
+  players: MatchPlayer[];
+  settings: MatchSettings;
+  event: EventInfo | null;
+  standings: TournamentRow[];
+  matches: TournamentMatch[];
+  ratings: Record<string, RatingChange> | null;
+  baru?: boolean;
+}
+
+export interface TraceStep {
+  baris: number;
+  fungsi: string;
+  vars: Record<string, string>;
+  langkah: number;
+  kembali?: string;
+}
+
+export interface DebugResult {
+  ok: boolean;
+  pilihan?: Senjata | null;
+  error?: BotErrorInfo | null;
+  cetak?: string[];
+  langkah?: number;
+  trace?: TraceStep[];
+  jejak_penuh?: boolean;
+  info?: { ronde: number; hp: Record<string, number>; riwayat: number; kabut: boolean };
 }
 
 export interface Template {

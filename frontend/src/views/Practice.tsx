@@ -5,6 +5,7 @@ import { Replay } from '../replay/Replay';
 import { KEYS, load, save, type SavedBot } from '../storage';
 import type { BotErrorInfo, LogEntry, MatchData, MatchSettings, Template } from '../types';
 import { BotLog } from './BotLog';
+import { DebugPanel, EventSelect } from './SuitExtras';
 
 interface Props {
   bot: SavedBot;
@@ -18,7 +19,7 @@ interface PracticePrefs {
 
 const DEFAULT_PREFS: PracticePrefs = {
   lawan: ['anti_mayoritas', 'pemutar', 'minoritas', 'pembalas'],
-  settings: { hp_awal: 1000, hp_kalah: 100, ronde_maks: 100, ingatan: 10 },
+  settings: { hp_awal: 1000, hp_kalah: 100, ronde_maks: 100, ingatan: 10, event: 'normal' },
 };
 
 export function Practice({ bot, setBot }: Props) {
@@ -27,6 +28,7 @@ export function Practice({ bot, setBot }: Props) {
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<{ match: MatchData; log: LogEntry[]; key: number } | null>(null);
   const [err, setErr] = useState<BotErrorInfo | string | null>(null);
+  const [ronde, setRonde] = useState(1);
 
   useEffect(() => {
     getTemplates().then(setTemplates).catch(() => setTemplates([]));
@@ -80,6 +82,7 @@ export function Practice({ bot, setBot }: Props) {
               <label className="field" htmlFor="pr-loss">HP hilang saat kalah<input id="pr-loss" type="number" min={1} max={100000} step={10} value={prefs.settings.hp_kalah} onChange={(e) => setNum('hp_kalah', +e.target.value)} /></label>
               <label className="field" htmlFor="pr-max">Batas ronde<input id="pr-max" type="number" min={1} max={300} value={prefs.settings.ronde_maks} onChange={(e) => setNum('ronde_maks', +e.target.value)} /></label>
               <label className="field" htmlFor="pr-mem">Ingatan bot (ronde)<input id="pr-mem" type="number" min={1} max={50} value={prefs.settings.ingatan} onChange={(e) => setNum('ingatan', +e.target.value)} /></label>
+              <EventSelect id="pr-event" value={prefs.settings.event ?? 'normal'} onChange={(v) => setPrefs({ ...prefs, settings: { ...prefs.settings, event: v } })} />
             </div>
           </div>
         </aside>
@@ -98,7 +101,8 @@ export function Practice({ bot, setBot }: Props) {
       </div>
       {res && (
         <div id="practice-result" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Replay key={res.key} match={res.match} myIndex={0} />
+          <Replay key={res.key} match={res.match} myIndex={0} onRound={setRonde} />
+          <DebugPanel match={res.match} myIndex={0} code={bot.code} ronde={ronde} />
           <BotLog log={res.log} />
         </div>
       )}

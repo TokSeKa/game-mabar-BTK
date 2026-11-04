@@ -12,10 +12,11 @@ const Guide = lazy(() => import('./views/Guide').then((m) => ({ default: m.Guide
 const Room = lazy(() => import('./views/Room').then((m) => ({ default: m.Room })));
 const KilasApp = lazy(() => import('./trading/KilasApp'));
 const HubApp = lazy(() => import('./games/HubApp'));
+const SuitLiga = lazy(() => import('./views/SuitExtras').then((m) => ({ default: m.SuitLiga })));
 
 type View =
   | { name: 'portal' }
-  | { name: 'home' | 'practice' | 'guide' }
+  | { name: 'home' | 'practice' | 'guide' | 'liga' }
   | { name: 'room'; entry: RoomEntry; key: number }
   | { name: 'pasar'; tab: KilasTab; raceCode?: string }
   | { name: 'mabar'; route: MabarRoute };
@@ -55,6 +56,7 @@ function viewFromHash(): View {
   if (h === '#suit') return { name: 'home' };
   if (h === '#latihan') return { name: 'practice' };
   if (h === '#panduan') return { name: 'guide' };
+  if (h === '#liga') return { name: 'liga' };
   const race = /^#pasar-balap-([A-Za-z0-9]{5})$/.exec(h);
   if (race) return { name: 'pasar', tab: 'balapan', raceCode: race[1].toUpperCase() };
   if (h === '#pasar') return { name: 'pasar', tab: 'main' };
@@ -76,6 +78,7 @@ function hashFor(v: View): string {
     case 'home': return '#suit';
     case 'practice': return '#latihan';
     case 'guide': return '#panduan';
+    case 'liga': return '#liga';
     case 'pasar': return v.tab === 'main' ? '#pasar' : `#pasar-${v.tab}`;
     case 'mabar': return mabarHash(v.route);
     default: return '';
@@ -152,7 +155,7 @@ export function App() {
   }, []);
 
   const enterRoom = (entry: RoomEntry) => setViewState({ name: 'room', entry, key: Date.now() });
-  const inSuit = view.name === 'home' || view.name === 'practice' || view.name === 'guide';
+  const inSuit = view.name === 'home' || view.name === 'practice' || view.name === 'guide' || view.name === 'liga';
   const inPasar = view.name === 'pasar';
   const inMabar = view.name === 'mabar';
   const inMabarRoom = view.name === 'mabar' && view.route.page === 'room';
@@ -178,6 +181,7 @@ export function App() {
                 <button type="button" aria-current={view.name === 'home' ? 'page' : undefined} onClick={() => go({ name: 'home' })}>Main bareng</button>
                 <button type="button" aria-current={view.name === 'practice' ? 'page' : undefined} onClick={() => go({ name: 'practice' })}>Arena latihan</button>
                 <button type="button" aria-current={view.name === 'guide' ? 'page' : undefined} onClick={() => go({ name: 'guide' })}>Panduan</button>
+                <button type="button" aria-current={view.name === 'liga' ? 'page' : undefined} onClick={() => go({ name: 'liga' })}>Liga</button>
               </>
             )}
             {inMabar && (
@@ -201,7 +205,7 @@ export function App() {
             initialCode={hashRoom()}
             session={load<Session | null>(KEYS.session, null)}
             onCreate={(name) => enterRoom({ action: 'create', name })}
-            onJoin={(name, code) => enterRoom({ action: 'join', name, code })}
+            onJoin={(name, code, spectator) => enterRoom({ action: 'join', name, code, spectator })}
             onRejoin={(session) => enterRoom({ action: 'rejoin', session })}
             onPractice={() => go({ name: 'practice' })}
             onGuide={() => go({ name: 'guide' })}
@@ -209,6 +213,7 @@ export function App() {
         )}
         {view.name === 'practice' && <Practice bot={bot} setBot={setBot} />}
         {view.name === 'guide' && <Guide />}
+        {view.name === 'liga' && <SuitLiga />}
         {view.name === 'room' && (
           <Room
             key={view.key}

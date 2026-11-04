@@ -23,6 +23,8 @@ export interface ReplayOptions {
   myIndex?: number;
   autoplay?: boolean;
   startAtEnd?: boolean;
+  /** dipanggil setiap ronde yang ditampilkan berubah (nomor ronde, mulai 1) */
+  onRound?: (ronde: number) => void;
 }
 
 export class ReplayArena {
@@ -42,6 +44,7 @@ export class ReplayArena {
   private ro: ResizeObserver;
   private destroyed = false;
   private myIndex: number | undefined;
+  private onRound: ((ronde: number) => void) | undefined;
   private timers = new Set<number>();
   private stage!: HTMLDivElement;
   private uid = `a${++arenaSeq}`; // id unik untuk marker SVG
@@ -51,6 +54,7 @@ export class ReplayArena {
     this.match = match;
     this.rounds = match.rounds;
     this.myIndex = opts.myIndex;
+    this.onRound = opts.onRound;
     this.hpStart = match.settings.hp_awal;
     this.hpShown = match.players.map(() => this.hpStart);
     this.speed = load<number>('sba-speed', 1);
@@ -95,6 +99,9 @@ export class ReplayArena {
               <span>Hidup <b data-k="alive"></b></span>
               <span>Total HP <b data-k="total"></b></span>
               <span>Ingatan bot <b>${s.ingatan}</b> ronde</span>
+              ${this.match.event && this.match.event.id !== 'normal'
+                ? `<span class="ev-badge" title="${escapeHtml(this.match.event.ket)}">⚡ ${escapeHtml(this.match.event.nama)}${this.match.event.kejutan ? ' (kejutan)' : ''}</span>`
+                : ''}
             </div>
             <ol class="phases">
               <li data-p="think">Berpikir</li><li data-p="reveal">Pilih</li><li data-p="gather">Kumpul</li><li data-p="resolve">Bagi poin</li>
@@ -322,6 +329,7 @@ export class ReplayArena {
     this.q('[data-k="round"]').textContent = String(rn);
     this.q<HTMLInputElement>('.scrub input').value = String(Math.min(idx + 1, this.rounds.length));
     this.q('.scrub output').textContent = 'R' + rn;
+    this.onRound?.(rn);
   }
 
   private updateHud(): void {
