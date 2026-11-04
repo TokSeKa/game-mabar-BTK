@@ -13,20 +13,6 @@
 .kilas { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .kilas-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 
-/* ---------- pilih permainan ---------- */
-.portal h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(24px, 4vw, 36px); margin: 8px 0 16px; }
-.portal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 760px) { .portal-grid { grid-template-columns: minmax(0, 1fr); } }
-.game-card { text-align: left; border: 0; border-radius: 22px; padding: 20px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 8px; color: var(--fg); transition: box-shadow .2s, transform .2s; }
-.game-card:hover { box-shadow: inset 0 0 0 2px var(--gold); transform: translateY(-2px); }
-.game-card b { font-family: var(--font-display); font-weight: 400; font-size: 24px; }
-.game-card span { color: var(--muted); font-size: 14.5px; }
-.gc-art { display: flex; gap: 10px; align-items: flex-start; height: 84px; }
-.gc-art .mini-bot { width: 60px; height: 60px; }
-.gc-art.candles { gap: 9px; align-items: flex-start; }
-.gc-art.candles i { display: block; width: 14px; border-radius: 3px; background: var(--good); position: relative; }
-.gc-art.candles i.dn { background: var(--bad); }
-
 /* ---------- setup ---------- */
 .setup { display: flex; flex-direction: column; gap: 14px; }
 .setup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }

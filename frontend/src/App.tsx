@@ -3,6 +3,7 @@ import { KEYS, load, save, type SavedBot, type Session } from './storage';
 import { Home } from './views/Home';
 import type { RoomEntry } from './views/Room';
 import type { KilasTab } from './trading/KilasApp';
+import type { GameTab, MabarRoute } from './games/HubApp';
 import { ROBOT } from './replay/assets';
 
 // game dimuat terpisah supaya halaman pertama ringan
@@ -10,15 +11,39 @@ const Practice = lazy(() => import('./views/Practice').then((m) => ({ default: m
 const Guide = lazy(() => import('./views/Guide').then((m) => ({ default: m.Guide })));
 const Room = lazy(() => import('./views/Room').then((m) => ({ default: m.Room })));
 const KilasApp = lazy(() => import('./trading/KilasApp'));
+const HubApp = lazy(() => import('./games/HubApp'));
 
 type View =
   | { name: 'portal' }
   | { name: 'home' | 'practice' | 'guide' }
   | { name: 'room'; entry: RoomEntry; key: number }
-  | { name: 'pasar'; tab: KilasTab; raceCode?: string };
+  | { name: 'pasar'; tab: KilasTab; raceCode?: string }
+  | { name: 'mabar'; route: MabarRoute };
 
 const DEFAULT_BOT: SavedBot = { mode: 'blocks', code: '', blocks: null };
 const PASAR_TABS: KilasTab[] = ['main', 'harian', 'balapan', 'riwayat', 'akun', 'panduan'];
+
+function mabarFromHash(h: string): MabarRoute | null {
+  if (h === '#main') return { page: 'home' };
+  const room = /^#main-room-([A-Za-z0-9]{5})$/.exec(h);
+  if (room) {
+    const kode = room[1].toUpperCase();
+    const s = load<{ kode: string; member_id: string; token: string } | null>('mabar-sesi', null);
+    if (s && s.kode === kode) return { page: 'room', entry: { action: 'kembali', session: s }, key: 1 };
+    return { page: 'home', kode };
+  }
+  const g = /^#main-([a-z0-9_]+?)(?:-(main|latihan|panduan|liga))?$/.exec(h);
+  if (g) return { page: 'game', gid: g[1], tab: (g[2] as GameTab) ?? 'main' };
+  return null;
+}
+
+function mabarHash(r: MabarRoute): string {
+  if (r.page === 'home') return '#main';
+  if (r.page === 'game') return r.tab === 'main' ? `#main-${r.gid}` : `#main-${r.gid}-${r.tab}`;
+  if (r.entry.action === 'kembali') return `#main-room-${r.entry.session.kode}`;
+  if (r.entry.action === 'gabung') return `#main-room-${r.entry.kode}`;
+  return '#main';
+}
 
 function hashRoom(): string {
   const m = /^#room-([A-Za-z0-9]{5})$/.exec(location.hash);
@@ -35,6 +60,10 @@ function viewFromHash(): View {
   if (h === '#pasar') return { name: 'pasar', tab: 'main' };
   const tab = h.startsWith('#pasar-') ? (h.slice(7) as KilasTab) : null;
   if (tab && PASAR_TABS.includes(tab)) return { name: 'pasar', tab };
+  if (h.startsWith('#main')) {
+    const route = mabarFromHash(h);
+    if (route) return { name: 'mabar', route };
+  }
   const code = hashRoom();
   const session = load<Session | null>(KEYS.session, null);
   if (code && session && session.code === code) return { name: 'room', entry: { action: 'rejoin', session }, key: 1 };
@@ -48,6 +77,7 @@ function hashFor(v: View): string {
     case 'practice': return '#latihan';
     case 'guide': return '#panduan';
     case 'pasar': return v.tab === 'main' ? '#pasar' : `#pasar-${v.tab}`;
+    case 'mabar': return mabarHash(v.route);
     default: return '';
   }
 }
@@ -63,6 +93,11 @@ function Portal({ go }: { go: (v: View) => void }) {
           </span>
           <b>Suit Bot Arena</b>
           <span>Program bot batu-gunting-kertas dengan blok atau Python, lalu adu dengan bot teman sampai HP habis. 2–8 pemain.</span>
+        </button>
+        <button type="button" className="game-card mabar" onClick={() => go({ name: 'mabar', route: { page: 'home' } })}>
+          <span className="gc-art mabar-art" aria-hidden="true">🂡 🚢 🤖 🃏 🍢 🔨</span>
+          <b>Arena Mabar</b>
+          <span>11 game main bareng: poker, tenggelamkan kapal, robot arena, deck-builder, tycoon, lelang, dan lainnya. Setiap kursi boleh manusia atau bot, dicampur.</span>
         </button>
         <button type="button" className="game-card pasar" onClick={() => go({ name: 'pasar', tab: 'main' })}>
           <span className="gc-art candles" aria-hidden="true">
@@ -91,6 +126,7 @@ export function App() {
     const onHash = () => setViewState((v) => {
       const next = viewFromHash();
       if (v.name === 'room' && next.name === 'portal') return v; // jangan keluar room tanpa sengaja
+      if (v.name === 'mabar' && v.route.page === 'room' && next.name === 'portal') return v;
       return next;
     });
     window.addEventListener('hashchange', onHash);
@@ -118,18 +154,23 @@ export function App() {
   const enterRoom = (entry: RoomEntry) => setViewState({ name: 'room', entry, key: Date.now() });
   const inSuit = view.name === 'home' || view.name === 'practice' || view.name === 'guide';
   const inPasar = view.name === 'pasar';
+  const inMabar = view.name === 'mabar';
+  const inMabarRoom = view.name === 'mabar' && view.route.page === 'room';
+  const goMabar = useCallback((route: MabarRoute) => go({ name: 'mabar', route }), [go]);
 
   return (
     <div className={`app ${inPasar ? 'wide' : ''}`}>
       <header className="topbar">
-        <button className="logo" type="button" onClick={() => view.name !== 'room' && go({ name: 'portal' })} aria-label="Ke halaman pilih permainan">
+        <button className="logo" type="button" onClick={() => view.name !== 'room' && !inMabarRoom && go({ name: 'portal' })} aria-label="Ke halaman pilih permainan">
           {inPasar ? (
             <><span className="w2">Kilas</span> <span className="w1">Pasar</span></>
+          ) : inMabar ? (
+            <><span className="w3">Arena</span> <span className="w2">Mabar</span></>
           ) : (
             <><span className="w1">Suit</span> <span className="w2">Bot</span> <span className="w3">Arena</span></>
           )}
         </button>
-        {view.name !== 'room' && (
+        {view.name !== 'room' && !inMabarRoom && (
           <nav className="nav" aria-label="Menu">
             <button type="button" aria-current={view.name === 'portal' ? 'page' : undefined} onClick={() => go({ name: 'portal' })}>Semua game</button>
             {inSuit && (
@@ -139,8 +180,12 @@ export function App() {
                 <button type="button" aria-current={view.name === 'guide' ? 'page' : undefined} onClick={() => go({ name: 'guide' })}>Panduan</button>
               </>
             )}
-            {!inSuit && !inPasar && (
+            {inMabar && (
+              <button type="button" aria-current={view.route.page === 'home' ? 'page' : undefined} onClick={() => goMabar({ page: 'home' })}>Arena Mabar</button>
+            )}
+            {!inSuit && !inPasar && !inMabar && (
               <>
+                <button type="button" onClick={() => go({ name: 'mabar', route: { page: 'home' } })}>Arena Mabar</button>
                 <button type="button" onClick={() => go({ name: 'home' })}>Suit Bot Arena</button>
                 <button type="button" onClick={() => go({ name: 'pasar', tab: 'main' })}>Kilas Pasar</button>
               </>
@@ -180,6 +225,7 @@ export function App() {
         {view.name === 'pasar' && (
           <KilasApp tab={view.tab} raceCode={view.raceCode} toast={toast} setTab={(tab) => go({ name: 'pasar', tab })} />
         )}
+        {view.name === 'mabar' && <HubApp route={view.route} go={goMabar} toast={toast} />}
       </Suspense>
 
       {toastMsg && (

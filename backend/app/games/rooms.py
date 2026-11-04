@@ -61,7 +61,7 @@ class Seat:
 
     def public(self, members: dict[str, Member]) -> dict[str, Any]:
         m = members.get(self.owner)
-        return {"id": self.id, "name": self.name, "kind": self.kind, "label": self.label,
+        return {"id": self.id, "name": self.name, "kind": self.kind, "label": self.label, "self": self.self_seat,
                 "owner": self.owner, "owner_name": m.name if m else "?", "online": bool(m and m.online)}
 
 
@@ -354,8 +354,10 @@ class GameRoom:
                             self.actions[p] = g.default(s, p)
                             timeouts.append(p)
                 elif self.jeda > 0:
+                    self.deadline = 0.0
                     await asyncio.sleep(self.jeda)
                 else:
+                    self.deadline = 0.0
                     await asyncio.sleep(0)
                 events = g.apply(s, dict(self.actions))
                 if timeouts:
@@ -447,6 +449,7 @@ class GameRoom:
             raise RoomError("Kamu sudah bertindak di langkah ini.")
         self.actions[p] = a
         await self._send(m, {"type": "aksi_ok", "step": self.step})
+        await self.broadcast({"type": "sudah", "kursi": p, "step": self.step})
         self.wake.set()
 
     async def react(self, m: Member, emoji: str) -> None:
