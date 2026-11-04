@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BotEditor, copyText, type CheckState } from '../editor/BotEditor';
+import { BotEditor, type CheckState } from '../editor/BotEditor';
+import { copyText } from '../util';
 import { Replay } from '../replay/Replay';
 import { ROBOT } from '../replay/assets';
 import { RoomSocket, type ConnStatus } from '../socket';

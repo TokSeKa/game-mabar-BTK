@@ -14,14 +14,8 @@ interface Props {
   children?: ReactNode;
 }
 
-export async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
+export { copyText } from '../util';
+import { copyText } from '../util';
 
 export function CopyGuideButton({ className = 'btn' }: { className?: string }) {
   const [label, setLabel] = useState('Salin panduan untuk AI');

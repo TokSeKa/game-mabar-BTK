@@ -5,8 +5,8 @@ export function apiUrl(path: string): string {
   return new URL(path.replace(/^\//, ''), document.baseURI).toString();
 }
 
-export function wsUrl(): string {
-  const u = new URL('ws', document.baseURI);
+export function wsUrl(path = 'ws'): string {
+  const u = new URL(path, document.baseURI);
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
   return u.toString();
 }

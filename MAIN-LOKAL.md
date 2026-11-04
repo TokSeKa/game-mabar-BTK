@@ -53,6 +53,28 @@ Perintah lain:
 
 Selama Docker Desktop menyala, game dan tunnel tetap berjalan meski terminal ditutup. Jangan lupa `stop` setelah selesai main.
 
+### Data untuk Kilas Pasar (game trading)
+
+Kilas Pasar butuh data candle pasar. Unduh sekali, lalu update kapan saja:
+
+- **Windows:** klik dua kali `scripts\unduh-data.bat`, lalu pilih:
+  - **1 Cepat**: ±5 menit. Berisi 5 kripto (1 menit sejak 2024-07), 30 saham IDX, dan 20 saham US.
+  - **2 Penuh**: beberapa jam dan puluhan GB. Berisi ±65 kripto (1 menit sejak 2017), ±140 saham IDX, dan ±90 saham US.
+  - **3 Update**: menambahkan data terbaru ke semua aset yang sudah ada.
+- **Mac / Linux:**
+
+  ```bash
+  ./scripts/unduh-data.sh cepat
+  ```
+
+  Ganti `cepat` dengan `penuh`, `update`, `contoh`, atau `status` sesuai kebutuhan.
+
+Pengunduhan bisa dijalankan saat game sedang menyala. Setelah selesai, cukup muat ulang halaman Kilas Pasar. Unduhan yang terputus (Ctrl+C, internet mati) bisa diulang dan akan melanjutkan dari bagian yang belum ada.
+
+Data tersimpan di volume Docker `pasar-data`, jadi tidak hilang walaupun container dimatikan atau di-build ulang. Kalau memakai preset penuh, cek batas disk Docker Desktop di **Settings → Resources → Advanced → Disk image size**.
+
+Untuk saham, Yahoo hanya menyediakan data 5–30 menit untuk ±60 hari terakhir, dan 1 menit untuk ±30 hari. Jalankan **Update** rutin (misalnya seminggu sekali) supaya riwayat intraday saham makin panjang.
+
 ---
 
 ## Cara B: tanpa Docker (Mac / Linux / WSL)
@@ -82,6 +104,14 @@ PORT=9000 ./scripts/main-lokal-tanpa-docker.sh      # kalau port 8080 sudah dipa
 ```bash
 REBUILD=1 ./scripts/main-lokal-tanpa-docker.sh      # build ulang frontend setelah update kode
 ```
+
+Data Kilas Pasar tanpa Docker (disimpan di folder `data/` di dalam repo). Jalankan dari folder `backend`:
+
+```bash
+.venv/bin/python -m app.trading.unduh semua --preset cepat
+```
+
+Ganti `semua --preset cepat` dengan `semua --preset penuh`, `update`, `contoh`, atau `status`.
 
 ### Main dengan teman di Wi-Fi yang sama (tanpa internet/tunnel)
 

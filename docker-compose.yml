@@ -13,10 +13,17 @@ services:
       PLAYER_GRACE_SECONDS: ${PLAYER_GRACE_SECONDS:-600}
       ROOM_IDLE_SECONDS: ${ROOM_IDLE_SECONDS:-1800}
       PRACTICE_CONCURRENCY: ${PRACTICE_CONCURRENCY:-4}
-    mem_limit: ${MEM_LIMIT:-512m}
+      DATA_DIR: /data
+    volumes:
+      # data pasar (candle) + database akun Kilas Pasar
+      - ${PASAR_DATA:-pasar-data}:/data
+    mem_limit: ${MEM_LIMIT:-1g}
     cpus: ${CPUS:-1.0}
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  pasar-data:

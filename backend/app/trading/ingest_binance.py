@@ -164,7 +164,13 @@ def ingest_symbol(root: Path, symbol: str, since: str | None, log: Log, workers:
                 log(f"    gagal: {Path(futs[f]).name} ({e})")
     if not parts:
         return False
-    merged = dedupe_sorted(np.concatenate([existing] + parts))
+    # file bulanan/harian tidak saling tumpang tindih: cukup diurutkan per file (hemat memori).
+    parts = sorted((p for p in parts if len(p)), key=lambda r: int(r["t"][0]))
+    merged = np.concatenate([existing] + parts)
+    del parts
+    t = merged["t"]
+    if len(t) > 1 and not bool(np.all(t[1:] > t[:-1])):
+        merged = dedupe_sorted(merged)
     write_series(path, merged)
     derive(root, "crypto", symbol, "1m", list(MARKETS["crypto"].tfs))
     update_catalog_asset(root, "crypto", symbol, native={"1m"})

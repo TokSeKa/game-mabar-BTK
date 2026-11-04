@@ -187,7 +187,10 @@ class AccountDB:
         e = self.daily_entry(date, user_id)
         if not e or e["status"] != "done":
             return None
+        # sama dengan urutan papan: return tertinggi dulu, kalau sama yang lebih dulu selesai di atas
         with self.lock:
-            r = self.db.execute("SELECT COUNT(*) n FROM daily_entries WHERE date=? AND status='done' AND return_pct > ?",
-                                (date, e["return_pct"])).fetchone()
+            r = self.db.execute(
+                "SELECT COUNT(*) n FROM daily_entries WHERE date=? AND status='done' AND "
+                "(return_pct > ? OR (return_pct = ? AND finished < ?))",
+                (date, e["return_pct"], e["return_pct"], e["finished"])).fetchone()
         return int(r["n"]) + 1

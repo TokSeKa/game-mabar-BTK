@@ -199,7 +199,7 @@ class Conn:
             await svc.race_broadcast(room, svc.race_state(room))
             if t == "race_rejoin" and room.view:
                 await self.send(svc._race_session(room, tr))
-                await self.send(svc.account_msg(room.view, tr))
+                await self.send(svc.account_msg(room.view, tr, full=True))
                 await self.send(svc.race_board(room))
                 if room.status == "done":
                     await self.send({"type": "summary", "mode": "balapan", **svc.summary(room.view, tr), "board": room.results or []})
@@ -215,7 +215,7 @@ class Conn:
         await self.send(session_payload(s.view, s.trader.account, s.mode, s.chart_tf,
                                         {"id": s.id, "secret": s.secret, "resumed": resumed,
                                          "fixed_end": s.mode.startswith("harian")}))
-        await self.send(self.svc.account_msg(s.view, s.trader))
+        await self.send(self.svc.account_msg(s.view, s.trader, full=True))
         if s.finished:
             await self.send(s.finished)
 

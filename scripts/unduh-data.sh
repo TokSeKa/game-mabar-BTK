@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Unduh data pasar untuk Kilas Pasar (lewat Docker). Data disimpan di volume Docker "pasar-data",
+# jadi server yang sedang berjalan langsung bisa memakainya (cukup muat ulang halaman).
+#
+#   ./scripts/unduh-data.sh cepat     kripto 5 aset (1m sejak 2024-07), 30 saham IDX, 20 saham US  (beberapa menit)
+#   ./scripts/unduh-data.sh penuh     ±65 kripto 1m sejak 2017, ±140 saham IDX, ±90 saham US      (beberapa jam, puluhan GB)
+#   ./scripts/unduh-data.sh update    lengkapi semua aset yang sudah ada dengan data terbaru (jalankan rutin)
+#   ./scripts/unduh-data.sh contoh    data buatan untuk mencoba tanpa internet
+#   ./scripts/unduh-data.sh status    lihat jumlah candle & ukuran data
+#   ./scripts/unduh-data.sh kripto --simbol BTCUSDT,DOGEUSDT --mulai 2021-01   (argumen bebas)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+  echo "Docker belum terpasang atau belum berjalan. Buka Docker Desktop dulu." >&2
+  exit 1
+fi
+[ -f .env ] || cp .env.example .env
+
+case "${1:-cepat}" in
+  cepat)  args=(semua --preset cepat) ;;
+  penuh)
+    echo "Preset penuh mengunduh puluhan GB dan butuh beberapa jam. Bisa dihentikan (Ctrl+C) dan dilanjutkan kapan saja."
+    args=(semua --preset penuh) ;;
+  update) args=(update) ;;
+  contoh) args=(contoh) ;;
+  status) args=(status) ;;
+  *)      args=("$@") ;;
+esac
+
+exec docker compose -f docker-compose.yml run --rm --no-deps suitbot python -m app.trading.unduh "${args[@]}"

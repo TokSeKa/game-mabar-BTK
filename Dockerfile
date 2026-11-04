@@ -17,14 +17,16 @@ FROM ${PYTHON_IMAGE}
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     STATIC_DIR=/app/static \
-    GUIDE_PATH=/app/docs/PANDUAN_BOT_LLM.md
+    GUIDE_PATH=/app/docs/PANDUAN_BOT_LLM.md \
+    DATA_DIR=/data
 WORKDIR /app
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
 COPY docs ./docs
 COPY --from=web /web/dist ./static
-RUN useradd --create-home --uid 10001 suitbot
+# /data: data pasar Kilas Pasar + database akun (dipasang sebagai volume)
+RUN useradd --create-home --uid 10001 suitbot && mkdir -p /data && chown suitbot:suitbot /data
 USER suitbot
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

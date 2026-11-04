@@ -14,12 +14,13 @@ export class RoomSocket {
     private hello: () => object | null,
     private onMessage: (msg: Record<string, any>) => void,
     private onStatus: (s: ConnStatus) => void,
+    private path = 'ws',
   ) {}
 
   connect(): void {
     this.stopped = false;
     this.onStatus(this.retry ? 'reconnecting' : 'connecting');
-    const ws = new WebSocket(wsUrl());
+    const ws = new WebSocket(wsUrl(this.path));
     this.ws = ws;
     ws.onopen = () => {
       this.retry = 0;

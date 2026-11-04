@@ -265,7 +265,11 @@ class TradingService:
             acc.cancel(msg.get("id"))
         return [fill_payload(f) for f in fills]
 
-    def account_msg(self, view: MarketView, tr: Trader, fills: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    def account_msg(self, view: MarketView, tr: Trader, fills: list[dict[str, Any]] | None = None,
+                    full: bool = False) -> dict[str, Any]:
+        if full:  # saat (re)connect: kirim riwayat transaksi supaya penanda di chart lengkap
+            return {"type": "account", "account": tr.account.snapshot(view.last_price()), "full": True,
+                    "fills": [fill_payload(f) for f in tr.account.fills[-300:]]}
         return {"type": "account", "account": tr.account.snapshot(view.last_price()), "fills": fills or []}
 
     def run_engine(self, view: MarketView, tr: Trader, old: int, new: int) -> list[dict[str, Any]]:
@@ -407,6 +411,7 @@ class TradingService:
         await self.race_broadcast(room, self.race_state(room))
         for p in room.players.values():
             await self._send(p, self._race_session(room, p))
+            await self._send(p, self.account_msg(room.view, p, full=True))
         await self.race_broadcast(room, self.race_board(room))
         room.task = asyncio.create_task(self._race_loop(room))
 
