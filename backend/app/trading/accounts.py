@@ -47,6 +47,12 @@ class AccountDB:
             CREATE TABLE IF NOT EXISTS daily_entries (
                 date TEXT, user_id INTEGER, status TEXT, return_pct REAL, stats TEXT, finished INTEGER,
                 PRIMARY KEY (date, user_id));
+            CREATE TABLE IF NOT EXISTS ratings (
+                user_id INTEGER, game TEXT, rating REAL, games INTEGER, wins INTEGER, updated INTEGER,
+                PRIMARY KEY (user_id, game));
+            CREATE TABLE IF NOT EXISTS game_results (
+                id INTEGER PRIMARY KEY, user_id INTEGER, game TEXT, created INTEGER, rank INTEGER,
+                n_players INTEGER, score REAL, delta REAL);
             """)
 
     # ------------------------------------------------------------ akun
@@ -194,3 +200,51 @@ class AccountDB:
                 "(return_pct > ? OR (return_pct = ? AND finished < ?))",
                 (date, e["return_pct"], e["return_pct"], e["finished"])).fetchone()
         return int(r["n"]) + 1
+
+
+    # ------------------------------------------------------------ liga (ELO)
+    def rate(self, game: str, entries: list[tuple[int, int, float]], k: float = 32.0) -> dict[int, dict[str, float]]:
+        """Perbarui rating ELO multi-pemain. ``entries`` = [(user_id, peringkat (0=juara), skor)]."""
+        if len(entries) < 2:
+            return {}
+        now = int(time.time())
+        with self.lock:
+            cur = {}
+            for uid, _, _ in entries:
+                r = self.db.execute("SELECT rating FROM ratings WHERE user_id=? AND game=?", (uid, game)).fetchone()
+                cur[uid] = r["rating"] if r else 1200.0
+            n = len(entries)
+            out: dict[int, dict[str, float]] = {}
+            for uid, rank_i, score in entries:
+                delta = 0.0
+                for vid, rank_j, _ in entries:
+                    if vid == uid:
+                        continue
+                    exp = 1 / (1 + 10 ** ((cur[vid] - cur[uid]) / 400))
+                    act = 1.0 if rank_i < rank_j else 0.5 if rank_i == rank_j else 0.0
+                    delta += act - exp
+                delta *= k / (n - 1)
+                new = cur[uid] + delta
+                win = 1 if rank_i == 0 else 0
+                self.db.execute(
+                    "INSERT INTO ratings (user_id, game, rating, games, wins, updated) VALUES (?,?,?,1,?,?) "
+                    "ON CONFLICT(user_id, game) DO UPDATE SET rating=excluded.rating, games=games+1, wins=wins+excluded.wins, updated=excluded.updated",
+                    (uid, game, new, win, now))
+                self.db.execute("INSERT INTO game_results (user_id, game, created, rank, n_players, score, delta) VALUES (?,?,?,?,?,?,?)",
+                                (uid, game, now, rank_i + 1, n, score, delta))
+                out[uid] = {"lama": cur[uid], "baru": new, "delta": delta}
+            return out
+
+    def liga(self, game: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT u.username, r.rating, r.games, r.wins FROM ratings r JOIN users u ON u.id = r.user_id "
+                "WHERE r.game = ? ORDER BY r.rating DESC LIMIT ?", (game, limit)).fetchall()
+        return [{"rank": i + 1, "username": r["username"], "rating": r["rating"], "games": r["games"], "wins": r["wins"]}
+                for i, r in enumerate(rows)]
+
+    def my_ratings(self, user_id: int) -> list[dict[str, Any]]:
+        with self.lock:
+            rows = self.db.execute("SELECT game, rating, games, wins FROM ratings WHERE user_id = ? ORDER BY game",
+                                   (user_id,)).fetchall()
+        return [dict(r) for r in rows]

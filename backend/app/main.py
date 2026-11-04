@@ -42,6 +42,7 @@ class PracticeIn(BaseModel):
 
 
 def create_app(cfg: Config = default_config, trading: "TradingService | None" = None) -> FastAPI:
+    from .games.api import mount as mount_arena
     from .trading.api import create_trading, mount as mount_trading
 
     trading = trading or create_trading()
@@ -56,6 +57,7 @@ def create_app(cfg: Config = default_config, trading: "TradingService | None" = 
             try:
                 await manager.cleanup()
                 trading.cleanup()
+                arena.cleanup()
             except Exception:  # noqa: BLE001
                 log.exception("cleanup gagal")
 
@@ -188,6 +190,7 @@ def create_app(cfg: Config = default_config, trading: "TradingService | None" = 
                 await manager.disconnect(room, player, send)
 
     mount_trading(app, trading)
+    arena = mount_arena(app, pool=runner.executor, db=trading.db)
 
     # ------------------------------------------------------------ frontend
     if cfg.static_dir.is_dir():

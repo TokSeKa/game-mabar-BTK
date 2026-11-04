@@ -120,8 +120,11 @@ class CompiledBot:
     tree: ast.Module
 
 
-def compile_bot(source: str) -> CompiledBot:
-    """Parse dan validasi kode bot. Lempar ``BotError`` kalau ada masalah."""
+def compile_bot(source: str, func: str = "pilih", hint: str = "BATU, GUNTING, atau KERTAS") -> CompiledBot:
+    """Parse dan validasi kode bot. Lempar ``BotError`` kalau ada masalah.
+
+    ``func`` = nama fungsi utama yang wajib ada (Suit: ``pilih``, game lain: ``aksi``).
+    """
     if not isinstance(source, str):
         raise BotError("kode bot harus berupa teks")
     if len(source) > MAX_KODE:
@@ -139,13 +142,13 @@ def compile_bot(source: str) -> CompiledBot:
         raise BotError("kode terlalu bertingkat atau terlalu rumit") from None
 
     _check_tree(tree)
-    if not any(isinstance(n, ast.FunctionDef) and n.name == "pilih" for n in tree.body):
-        raise BotError("bot harus punya fungsi 'def pilih():' yang mengembalikan BATU, GUNTING, atau KERTAS")
+    if not any(isinstance(n, ast.FunctionDef) and n.name == func for n in tree.body):
+        raise BotError(f"bot harus punya fungsi 'def {func}():' yang mengembalikan {hint}")
     for n in tree.body:
-        if isinstance(n, ast.FunctionDef) and n.name == "pilih":
+        if isinstance(n, ast.FunctionDef) and n.name == func:
             required = len(n.args.args) - len(n.args.defaults)
             if required > 0:
-                raise BotError("fungsi pilih() tidak boleh punya parameter wajib", n.lineno)
+                raise BotError(f"fungsi {func}() tidak boleh punya parameter wajib", n.lineno)
     return CompiledBot(source=source, tree=tree)
 
 

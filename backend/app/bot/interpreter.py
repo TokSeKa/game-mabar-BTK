@@ -60,11 +60,12 @@ class UserFunction:
 
 
 class Env:
-    __slots__ = ("vars", "parent")
+    __slots__ = ("vars", "parent", "fname")
 
-    def __init__(self, parent: "Env | None" = None):
+    def __init__(self, parent: "Env | None" = None, fname: str = ""):
         self.vars: dict[str, Any] = {}
         self.parent = parent
+        self.fname = fname
 
 
 class _Return(BaseException):
@@ -189,7 +190,9 @@ def _convert_exception(e: Exception) -> BotError:
 
 # ---------------------------------------------------------------- interpreter
 class Interpreter:
-    def __init__(self, compiled: CompiledBot, library: dict[str, Any], limits: Limits | None = None):
+    def __init__(self, compiled: CompiledBot, library: dict[str, Any], limits: Limits | None = None,
+                 trace: list[dict[str, Any]] | None = None):
+        self.trace = trace  # kalau diisi: catat baris & variabel setiap statement (untuk debugger)
         self.tree = compiled.tree
         self.limits = limits or Limits()
         self.steps = 0
@@ -283,6 +286,8 @@ class Interpreter:
             try:
                 self.charge()
                 self._stmt[type(st)](st, env)
+                if self.trace is not None and len(self.trace) < 600 and not isinstance(st, ast.FunctionDef):
+                    self._record(st, env)
             except (_Return, _Break, _Continue):
                 raise
             except BotError as e:
@@ -294,12 +299,24 @@ class Interpreter:
                 err.baris = st.lineno
                 raise err from None
 
+    def _record(self, st: ast.stmt, env: Env) -> None:
+        vars_ = {}
+        for k, v in env.vars.items():
+            if isinstance(v, (UserFunction, LibFunction)):
+                continue
+            vars_[k] = to_text(v, 120, top=False)
+        self.trace.append({"baris": st.lineno, "fungsi": getattr(env, "fname", ""), "vars": vars_, "langkah": self.steps})
+
     def s_def(self, node: ast.FunctionDef, env: Env) -> None:
         defaults = [self.eval(d, env) for d in node.args.defaults]
         env.vars[node.name] = UserFunction(node, env, self, node.name, defaults)
 
     def s_return(self, node: ast.Return, env: Env) -> None:
-        raise _Return(self.eval(node.value, env) if node.value is not None else None)
+        value = self.eval(node.value, env) if node.value is not None else None
+        if self.trace is not None and len(self.trace) < 600:
+            self._record(node, env)
+            self.trace[-1]["kembali"] = to_text(value, 120, top=False)
+        raise _Return(value)
 
     def s_assign(self, node: ast.Assign, env: Env) -> None:
         value = self.eval(node.value, env)
@@ -662,7 +679,7 @@ class Interpreter:
         try:
             if self.depth > self.limits.max_depth:
                 raise BotError(f"terlalu banyak fungsi bertumpuk (maksimal {self.limits.max_depth}). Ada rekursi tanpa akhir?")
-            env = Env(f.env)
+            env = Env(f.env, f.name)
             for p, v in zip(params, args):
                 env.vars[p] = v
             for k, v in kwargs.items():
