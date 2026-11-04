@@ -86,6 +86,17 @@ export function App() {
     save(KEYS.bot, b);
   }, []);
 
+  // tombol back/forward browser atau mengetik alamat #... sendiri
+  useEffect(() => {
+    const onHash = () => setViewState((v) => {
+      const next = viewFromHash();
+      if (v.name === 'room' && next.name === 'portal') return v; // jangan keluar room tanpa sengaja
+      return next;
+    });
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
   const toast = useCallback((text: string, err = false) => setToastMsg({ text, err }), []);
   useEffect(() => {
     if (!toastMsg) return;

@@ -80,6 +80,11 @@ cat <<MSG
 
 MSG
 
+if curl -fsS "http://127.0.0.1:${PORT}/api/pasar/katalog" 2>/dev/null | grep -q '"pasar":{}'; then
+  echo "  Kilas Pasar belum punya data pasar. Unduh dengan: ./scripts/unduh-data.sh cepat"
+  echo
+fi
+
 if command -v open >/dev/null 2>&1; then open "$url" >/dev/null 2>&1 || true
 elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 || true
 fi

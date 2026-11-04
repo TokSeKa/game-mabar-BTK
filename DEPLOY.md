@@ -102,6 +102,37 @@ Hasilnya harus seperti `{"ok":true,"rooms":0}`. Container otomatis menyala lagi 
 > ```
 > lalu jalankan `docker compose up -d`.
 
+### 4b. Data pasar untuk Kilas Pasar
+
+Unduh data candle ke volume Docker `pasar-data`. Server yang sedang berjalan langsung membaca data baru tanpa perlu restart.
+
+```bash
+./scripts/unduh-data.sh cepat
+```
+
+Untuk data lengkap (±65 kripto 1 menit sejak 2017 + ±230 saham, puluhan GB, beberapa jam), jalankan di dalam `tmux` atau `screen` supaya tidak terputus saat SSH ditutup:
+
+```bash
+tmux new -s data './scripts/unduh-data.sh penuh'
+```
+
+Unduhan yang terhenti bisa dijalankan ulang dan akan melanjutkan dari bagian yang belum ada. Cek hasilnya:
+
+```bash
+./scripts/unduh-data.sh status
+```
+
+Supaya data selalu baru dan riwayat intraday saham makin panjang, pasang update otomatis setiap hari lewat `crontab -e`. Contoh berikut berjalan pukul 01:17:
+
+```bash
+17 1 * * * cd /opt/suitbot && ./scripts/unduh-data.sh update >> /var/log/kilas-update.log 2>&1
+```
+
+Catatan:
+- Pengunduh butuh RAM sekitar 1,5 GB saat memproses kripto besar (BTC/ETH), jadi `MEM_LIMIT` default di `.env` adalah `2g`.
+- Pastikan disk VPS cukup untuk preset penuh. Cek dengan `df -h`.
+- Kalau ingin data disimpan di folder biasa, set `PASAR_DATA=./data` di `.env`, lalu jalankan `sudo chown -R 10001:10001 ./data`.
+
 ## 5. Buka ke internet lewat reverse proxy
 
 Pilih **satu** cara yang cocok dengan VPS-mu.

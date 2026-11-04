@@ -79,4 +79,11 @@ Write-Host "  - Laptop harus tetap menyala dan tersambung internet selama main."
 Write-Host "  - Jendela ini boleh ditutup; game tetap jalan selama Docker Desktop menyala."
 Write-Host "  - Matikan dengan: scripts\main-lokal.bat stop"
 Write-Host ""
+try {
+  $kat = Invoke-RestMethod -Uri "http://127.0.0.1:8080/api/pasar/katalog" -TimeoutSec 5
+  if (-not $kat.pasar.PSObject.Properties.Name) {
+    Write-Host "  Kilas Pasar belum punya data pasar. Klik dua kali scripts\unduh-data.bat lalu pilih Cepat." -ForegroundColor Yellow
+    Write-Host ""
+  }
+} catch { }
 Start-Process $url
