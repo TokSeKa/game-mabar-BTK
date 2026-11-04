@@ -1,0 +1,156 @@
+# Main dari Laptop (tanpa VPS)
+
+Sebelum punya VPS, kamu bisa menjalankan Suit Bot Arena di laptop sendiri lalu membukanya ke internet lewat **Cloudflare Quick Tunnel**. Gratis, tidak perlu akun, dan tidak perlu domain. Kamu langsung dapat link seperti `https://kata-acak-acak.trycloudflare.com` yang bisa dibuka teman-temanmu dari HP atau laptop mana pun.
+
+```
+Teman-teman ──HTTPS──▶ Cloudflare ──tunnel──▶ cloudflared di laptopmu ──▶ game (port 8080)
+```
+
+Laptopmu jadi "VPS sementara". Port router tidak perlu dibuka dan IP publik tidak perlu diketahui.
+
+---
+
+## Ambil kodenya
+
+Kode ada di branch `suit-bot-arena` (belum di-merge ke `main`).
+
+- **Pakai git:**
+
+  ```bash
+  git clone -b suit-bot-arena https://github.com/TokSeKa/game-mabar-BTK.git
+  ```
+
+  ```bash
+  cd game-mabar-BTK
+  ```
+
+- **Tanpa git:** unduh ZIP dari https://github.com/TokSeKa/game-mabar-BTK/archive/refs/heads/suit-bot-arena.zip, lalu ekstrak.
+
+---
+
+## Cara A: pakai Docker Desktop (paling mudah, semua OS)
+
+1. Pasang **Docker Desktop**: https://www.docker.com/products/docker-desktop/ (di Windows, ikuti saja kalau diminta mengaktifkan WSL 2).
+2. Buka Docker Desktop dan tunggu sampai statusnya "running".
+3. Jalankan script:
+   - **Windows:** klik dua kali `scripts\main-lokal.bat`
+   - **Mac / Linux:**
+
+     ```bash
+     ./scripts/main-lokal.sh
+     ```
+
+4. Tunggu. Build pertama butuh beberapa menit, setelah itu cepat. Script akan menampilkan link `https://….trycloudflare.com` dan membukanya di browser.
+5. Bagikan link itu ke teman-temanmu. **Kamu juga buka lewat link itu**, bukan `localhost`, supaya tombol "Salin link undangan" di room memberi alamat yang benar.
+
+Perintah lain:
+
+| Keperluan | Windows | Mac / Linux |
+|---|---|---|
+| Lihat link lagi | `scripts\main-lokal.bat link` | `./scripts/main-lokal.sh link` |
+| Lihat log | `scripts\main-lokal.bat logs` | `./scripts/main-lokal.sh logs` |
+| Matikan | `scripts\main-lokal.bat stop` | `./scripts/main-lokal.sh stop` |
+
+Selama Docker Desktop menyala, game dan tunnel tetap berjalan meski terminal ditutup. Jangan lupa `stop` setelah selesai main.
+
+---
+
+## Cara B: tanpa Docker (Mac / Linux / WSL)
+
+Lebih ringan untuk laptop. Butuh:
+
+- **Python 3.10+**
+- **Node.js 18+** (hanya untuk build pertama)
+- **cloudflared**:
+  - Mac: `brew install cloudflared`
+  - Linux: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+
+Jalankan:
+
+```bash
+./scripts/main-lokal-tanpa-docker.sh
+```
+
+Script akan build frontend (sekali saja), menyiapkan Python venv, menyalakan server, membuka tunnel, lalu menampilkan link. Tekan **Ctrl+C** untuk berhenti; server dan tunnel ikut mati.
+
+Pilihan tambahan:
+
+```bash
+PORT=9000 ./scripts/main-lokal-tanpa-docker.sh      # kalau port 8080 sudah dipakai
+```
+
+```bash
+REBUILD=1 ./scripts/main-lokal-tanpa-docker.sh      # build ulang frontend setelah update kode
+```
+
+### Main dengan teman di Wi-Fi yang sama (tanpa internet/tunnel)
+
+```bash
+TUNNEL=0 ./scripts/main-lokal-tanpa-docker.sh
+```
+
+Script menampilkan alamat seperti `http://192.168.1.23:8080` yang bisa dibuka HP/laptop lain di Wi-Fi yang sama.
+
+---
+
+## Cara C: Windows tanpa Docker (manual)
+
+Pasang Python (https://www.python.org/downloads/, centang "Add to PATH"), Node.js (https://nodejs.org/), dan cloudflared:
+
+```powershell
+winget install --id Cloudflare.cloudflared
+```
+
+Build sekali (PowerShell, dari folder repo):
+
+```powershell
+cd frontend; npm ci; npm run build; cd ..
+```
+
+```powershell
+cd backend; py -m venv .venv; .venv\Scripts\pip install -r requirements.txt
+```
+
+Setiap mau main, buka **dua** jendela PowerShell.
+
+Jendela 1, di folder `backend`:
+
+```powershell
+.venv\Scripts\uvicorn app.main:app --host 127.0.0.1 --port 8080
+```
+
+Jendela 2:
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8080
+```
+
+Cari baris berisi `https://….trycloudflare.com` di jendela 2. Itu link untuk dibagikan.
+
+---
+
+## Hal yang perlu diingat
+
+- **Laptop harus tetap menyala dan tersambung internet** selama main. Matikan sleep otomatis dan colokkan charger.
+- **Link berubah** setiap kali tunnel dinyalakan ulang. Bagikan link baru ke teman-teman.
+- **Siapa pun yang punya link bisa membuka game**. Matikan tunnel setelah selesai main. Kode bot tetap berjalan di sandbox, jadi tidak bisa menyentuh file di laptopmu.
+- Quick Tunnel dari Cloudflare ditujukan untuk uji coba, tanpa jaminan selalu tersedia. Untuk main bareng 8 orang sudah cukup. Untuk dipakai terus-menerus, pindah ke VPS ([DEPLOY.md](DEPLOY.md)).
+- Room hilang kalau game dimatikan atau di-restart. Bot tiap pemain aman karena tersimpan di browser masing-masing.
+
+## Kalau ada masalah
+
+| Gejala | Solusi |
+|---|---|
+| "Docker belum berjalan" | Buka Docker Desktop, tunggu sampai siap, lalu jalankan lagi. |
+| Link tidak muncul | Cek log (`main-lokal logs`, atau `.lokal/tunnel.log` untuk cara B). Jaringan kantor/kampus kadang memblokir tunnel; coba hotspot HP. |
+| `address already in use` / port 8080 dipakai | Cara A: ubah `PORT` di file `.env`. Cara B: `PORT=9000 ./scripts/main-lokal-tanpa-docker.sh`. |
+| Teman melihat "Menyambung ulang…" terus | Biasanya koneksi internet laptop putus-nyambung. Pastikan laptop tidak sleep. |
+| Windows: script `.bat` langsung tertutup | Jalankan dari PowerShell supaya pesan error terlihat: `powershell -ExecutionPolicy Bypass -File scripts\main-lokal.ps1` |
+
+## Alternatif tunnel lain
+
+Semua alternatif ini cukup diarahkan ke `http://127.0.0.1:8080`:
+
+- **ngrok**: daftar gratis di https://ngrok.com, lalu `ngrok http 8080`.
+- **Tailscale Funnel**: cocok kalau kamu sudah pakai Tailscale.
+- **localhost.run**: tanpa instalasi, cukup SSH: `ssh -R 80:localhost:8080 nokey@localhost.run`.

@@ -6,3 +6,5 @@ node_modules/
 frontend/dist/
 .env
 *.tsbuildinfo
+.lokal/
+backend/.venv/

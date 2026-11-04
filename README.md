@@ -58,8 +58,10 @@ frontend/                React + Vite + TypeScript
 docs/PANDUAN_BOT_LLM.md  panduan lengkap untuk pemain & AI
 prototype/arena.html     prototipe visual awal
 deploy/                  contoh Nginx/Caddy + script update
+scripts/                 main dari laptop + Cloudflare Tunnel (Windows/Mac/Linux)
 Dockerfile, docker-compose.yml, .env.example
 DEPLOY.md                langkah deploy ke VPS
+MAIN-LOKAL.md            main dari laptop sebelum punya VPS
 ```
 
 ## Menjalankan di komputer sendiri (development)
@@ -112,6 +114,10 @@ Tes backend mencakup:
 - library game, determinisme match, dan batas ingatan
 - alur room lewat WebSocket
 - semua contoh bot di panduan
+
+## Main dari laptop (belum punya VPS)
+
+Lihat [MAIN-LOKAL.md](MAIN-LOKAL.md): game dijalankan di laptop lalu dibuka ke internet lewat Cloudflare Quick Tunnel (gratis, tanpa akun). Di Windows cukup klik dua kali `scripts\main-lokal.bat`; di Mac/Linux jalankan `./scripts/main-lokal.sh`.
 
 ## Deploy
 

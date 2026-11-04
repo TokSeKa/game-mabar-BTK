@@ -1,0 +1,14 @@
+# Tambahan untuk main dari laptop: membuka game ke internet lewat Cloudflare Quick Tunnel.
+# Tidak perlu akun atau domain. Link https://xxxx.trycloudflare.com muncul di log service "tunnel".
+#
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --build
+#
+# Atau pakai script: scripts/main-lokal.sh (Mac/Linux) atau scripts/main-lokal.bat (Windows).
+services:
+  tunnel:
+    image: cloudflare/cloudflared:2024.12.2
+    command: tunnel --no-autoupdate --url http://suitbot:8000
+    restart: unless-stopped
+    depends_on:
+      suitbot:
+        condition: service_healthy
