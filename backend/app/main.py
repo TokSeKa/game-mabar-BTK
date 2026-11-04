@@ -21,6 +21,9 @@ from .compute import MatchRunner
 from .config import Config, config as default_config
 from .rooms.manager import RoomError, RoomManager
 
+if False:  # untuk type hint saja
+    from .trading.service import TradingService  # noqa: F401
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("suitbot")
 
@@ -38,7 +41,10 @@ class PracticeIn(BaseModel):
     settings: dict[str, Any] = Field(default_factory=dict)
 
 
-def create_app(cfg: Config = default_config) -> FastAPI:
+def create_app(cfg: Config = default_config, trading: "TradingService | None" = None) -> FastAPI:
+    from .trading.api import create_trading, mount as mount_trading
+
+    trading = trading or create_trading()
     runner = MatchRunner(cfg.match_workers, cfg.bot_max_steps)
     manager = RoomManager(runner.run, max_rooms=cfg.max_rooms, max_players=cfg.max_players,
                           player_grace=cfg.player_grace_seconds, room_idle=cfg.room_idle_seconds)
@@ -49,6 +55,7 @@ def create_app(cfg: Config = default_config) -> FastAPI:
             await asyncio.sleep(60)
             try:
                 await manager.cleanup()
+                trading.cleanup()
             except Exception:  # noqa: BLE001
                 log.exception("cleanup gagal")
 
@@ -179,6 +186,8 @@ def create_app(cfg: Config = default_config) -> FastAPI:
         finally:
             if room is not None and player is not None and player.id in room.players:
                 await manager.disconnect(room, player, send)
+
+    mount_trading(app, trading)
 
     # ------------------------------------------------------------ frontend
     if cfg.static_dir.is_dir():
