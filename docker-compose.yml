@@ -1,0 +1,22 @@
+services:
+  suitbot:
+    build: .
+    image: suit-bot-arena:latest
+    container_name: suit-bot-arena
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-8080}:8000"
+    environment:
+      MATCH_WORKERS: ${MATCH_WORKERS:-2}
+      BOT_MAX_STEPS: ${BOT_MAX_STEPS:-20000}
+      MAX_ROOMS: ${MAX_ROOMS:-200}
+      PLAYER_GRACE_SECONDS: ${PLAYER_GRACE_SECONDS:-600}
+      ROOM_IDLE_SECONDS: ${ROOM_IDLE_SECONDS:-1800}
+      PRACTICE_CONCURRENCY: ${PRACTICE_CONCURRENCY:-4}
+    mem_limit: ${MEM_LIMIT:-512m}
+    cpus: ${CPUS:-1.0}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

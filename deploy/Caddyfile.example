@@ -1,0 +1,15 @@
+# Caddy mengurus HTTPS (Let's Encrypt) dan WebSocket secara otomatis.
+
+# Pilihan A: subdomain sendiri
+suit.domainmu.com {
+    reverse_proxy 127.0.0.1:8080
+}
+
+# Pilihan B: sub-path di domain yang sudah ada (tempel di dalam blok domainmu)
+# domainmu.com {
+#     redir /suitbot /suitbot/
+#     handle_path /suitbot/* {
+#         reverse_proxy 127.0.0.1:8080
+#     }
+#     # ... konfigurasi proyekmu yang lain ...
+# }
