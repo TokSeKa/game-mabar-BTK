@@ -1,0 +1,33 @@
+{
+  "name": "suit-bot-arena-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "6.18.4",
+    "@codemirror/commands": "6.7.1",
+    "@codemirror/lang-python": "6.1.6",
+    "@codemirror/language": "6.10.8",
+    "@codemirror/lint": "6.8.4",
+    "@codemirror/state": "6.5.0",
+    "@codemirror/view": "6.36.1",
+    "@lezer/highlight": "1.2.1",
+    "blockly": "12.5.1",
+    "codemirror": "6.0.1",
+    "marked": "15.0.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.6.3",
+    "vite": "5.4.11"
+  }
+}
