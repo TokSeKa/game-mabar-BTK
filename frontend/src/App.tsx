@@ -169,6 +169,8 @@ export function App() {
             <><span className="w2">Kilas</span> <span className="w1">Pasar</span></>
           ) : inMabar ? (
             <><span className="w3">Arena</span> <span className="w2">Mabar</span></>
+          ) : view.name === 'portal' ? (
+            <><span className="w1">Game</span> <span className="w2">Mabar</span> <span className="w3">BTK</span></>
           ) : (
             <><span className="w1">Suit</span> <span className="w2">Bot</span> <span className="w3">Arena</span></>
           )}

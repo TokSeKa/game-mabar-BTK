@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..bot.library import RoundView, make_library
+from ..bot.library import LIBRARY_DOCS, RoundView, make_library
 from ..bot.templates import TEMPLATES
 from ..engine.events import EVENTS, apply_event, event_info, hide_choices, resolve_event
 from ..engine.rules import SENJATA, resolve_round
@@ -30,6 +30,8 @@ class SuitLive(Game):
                 ket="Variasi aturan: taruhan ganda, pikun, kilat, darah tipis, kabut, atau kejutan acak."),
     ]
     templates = [{"id": t["id"], "nama": t["nama"], "ket": t["ket"], "kode": t["kode"]} for t in TEMPLATES]
+    # fungsi library Suit Bot Arena (BATU/GUNTING/KERTAS, pengalah, riwayat, ...) juga tersedia di Suit Live
+    lib_docs = [{k: d[k] for k in ("nama", "jenis", "tanda", "ket")} for d in LIBRARY_DOCS]
     aturan = """
 - Setiap ronde semua pemain memilih **BATU, GUNTING, atau KERTAS** bersamaan.
 - Setiap pemain yang senjatanya dikalahkan kehilangan *HP hilang saat kalah* (default 100). HP itu dikumpulkan lalu dibagi rata ke golongan yang mengalahkannya. Sisa pembagian: +1 ke pemenang ber-HP terendah dulu.

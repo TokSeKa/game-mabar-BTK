@@ -410,3 +410,12 @@ def test_kartu_hadiah_dan_istirahat():
     assert run["fase"] == "istirahat"
     g.apply(s, {0: g.validate(s, 0, "pulihkan")})
     assert run["hp"] == 10 + run["hp_maks"] * 35 // 100 and run["lantai"] == 5 and run["fase"] == "tarung"
+
+
+def test_dokumen_panduan_bot_terbaru():
+    """docs/bot/*.md harus sama dengan hasil generator (jalankan `python -m app.games.gen_docs` kalau gagal)."""
+    from app.games.gen_docs import OUT, render_all
+    for name, text in render_all().items():
+        path = OUT / name
+        assert path.exists(), f"{path} belum dibuat"
+        assert path.read_text(encoding="utf-8") == text, f"{path} ketinggalan, jalankan python -m app.games.gen_docs"

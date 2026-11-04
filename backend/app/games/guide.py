@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .base import BASE_DOCS, Game
+from .base import Game
 
 BAHASA = """## Bahasa bot (sama untuk semua game)
 
@@ -50,7 +50,7 @@ def guide_markdown(g: Game) -> str:
         "| Fungsi | Keterangan |",
         "|---|---|",
     ]
-    for d in BASE_DOCS + g.lib_docs:
+    for d in g.all_docs():
         lines.append(f"| `{d['tanda']}` | {d['ket']} |")
     if g.settings:
         lines += ["", "## Pengaturan room (diatur host)", "", "| Pengaturan | Default | Keterangan |", "|---|---|---|"]

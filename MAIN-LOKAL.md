@@ -1,6 +1,6 @@
 # Main dari Laptop (tanpa VPS)
 
-Sebelum punya VPS, kamu bisa menjalankan Suit Bot Arena di laptop sendiri lalu membukanya ke internet lewat **Cloudflare Quick Tunnel**. Gratis, tidak perlu akun, dan tidak perlu domain. Kamu langsung dapat link seperti `https://kata-acak-acak.trycloudflare.com` yang bisa dibuka teman-temanmu dari HP atau laptop mana pun.
+Sebelum punya VPS, kamu bisa menjalankan semua game (Arena Mabar, Suit Bot Arena, Kilas Pasar) di laptop sendiri lalu membukanya ke internet lewat **Cloudflare Quick Tunnel**. Gratis, tidak perlu akun, dan tidak perlu domain. Kamu langsung dapat link seperti `https://kata-acak-acak.trycloudflare.com` yang bisa dibuka teman-temanmu dari HP atau laptop mana pun.
 
 ```
 Teman-teman ──HTTPS──▶ Cloudflare ──tunnel──▶ cloudflared di laptopmu ──▶ game (port 8080)

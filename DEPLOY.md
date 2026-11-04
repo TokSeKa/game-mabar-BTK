@@ -1,6 +1,8 @@
-# Deploy Suit Bot Arena ke VPS
+# Deploy Game Mabar BTK ke VPS
 
-Panduan ini untuk VPS Linux (Ubuntu/Debian) yang juga menjalankan proyekmu yang lain. Suit Bot Arena berjalan sebagai **satu container Docker** di port lokal (default `127.0.0.1:8080`), lalu dibuka ke internet lewat reverse proxy (Nginx atau Caddy) yang mungkin sudah kamu pakai.
+Panduan ini untuk VPS Linux (Ubuntu/Debian) yang juga menjalankan proyekmu yang lain. Semua game (Arena Mabar dengan 11 game, Suit Bot Arena,
+dan Kilas Pasar) berjalan sebagai **satu container Docker** bernama `suit-bot-arena` di port lokal (default `127.0.0.1:8080`), lalu dibuka
+ke internet lewat reverse proxy (Nginx atau Caddy) yang mungkin sudah kamu pakai.
 
 ```
 Internet ──HTTPS──▶ Nginx / Caddy (port 80/443) ──▶ 127.0.0.1:8080 ──▶ container suit-bot-arena (port 8000)
@@ -12,7 +14,7 @@ Konfigurasi di folder `deploy/` sudah diuji dengan Nginx, baik di subdomain maup
 
 ## 0. Yang dibutuhkan
 
-- VPS dengan Docker. RAM 512 MB untuk game ini sudah cukup.
+- VPS dengan Docker. RAM 1 GB cukup untuk main bareng; 2 GB kalau mau mengunduh data kripto penuh untuk Kilas Pasar.
 - (Disarankan) domain atau subdomain yang mengarah ke IP VPS, misalnya `suit.domainmu.com`.
 - Akses SSH.
 
@@ -68,9 +70,9 @@ Yang paling penting:
 |---|---|---|
 | `PORT` | `8080` | Port di VPS. Pilih yang belum dipakai proyekmu yang lain. |
 | `BIND_ADDRESS` | `127.0.0.1` | Biarkan begini kalau memakai reverse proxy. Ganti `0.0.0.0` hanya kalau ingin langsung diakses lewat `http://IP:PORT`. |
-| `MATCH_WORKERS` | `2` | Jumlah proses yang menghitung match secara paralel. |
+| `MATCH_WORKERS` | `2` | Jumlah proses yang menghitung match secara paralel: match & turnamen Suit, latihan, dan match Arena Mabar yang semua kursinya bot. |
 | `BOT_MAX_STEPS` | `20000` | Batas "langkah berpikir" bot per ronde. |
-| `MEM_LIMIT` / `CPUS` | `512m` / `1.0` | Batas sumber daya container, supaya tidak mengganggu proyek lain. |
+| `MEM_LIMIT` / `CPUS` | `2g` / `1.0` | Batas sumber daya container, supaya tidak mengganggu proyek lain. Untuk main saja, `1g` cukup. |
 
 Cek port yang sudah dipakai:
 
@@ -234,5 +236,10 @@ Script itu menjalankan `git pull`, build ulang, menyalakan ulang container, lalu
 ## 10. Catatan teknis
 
 - Server **harus berjalan dengan 1 worker uvicorn** (sudah diatur di Dockerfile) karena state room ada di memori proses. Perhitungan match tetap paralel lewat process pool (`MATCH_WORKERS`).
-- Tidak ada database dan tidak ada data pribadi yang disimpan. Nama pemain dan kode bot hanya ada di memori server selama room aktif, ditambah di `localStorage` browser masing-masing pemain.
+- Room semua game (Suit, Arena Mabar, balapan Kilas Pasar) hanya ada di memori: nama pemain dan kode bot hilang saat room ditutup atau server
+  di-restart. Kode bot juga tersimpan di `localStorage` browser masing-masing pemain.
+- Yang disimpan permanen hanya database SQLite `akun.db` di volume data: akun (password di-hash), papan peringkat Kilas Pasar, dan rating liga
+  semua game. Backup cukup dengan menyalin volume `pasar-data` (atau folder `PASAR_DATA`).
+- WebSocket yang dipakai: `/ws` (Suit Bot Arena), `/ws/main` (Arena Mabar), `/ws/pasar` (Kilas Pasar). Contoh config Nginx/Caddy di `deploy/`
+  sudah meneruskan semuanya, baik di subdomain maupun sub-path.
 - Kode bot dijalankan oleh interpreter khusus (bukan `exec`). Kode itu tidak bisa mengakses file, jaringan, atau sistem VPS. Container juga berjalan sebagai user non-root dengan batas RAM dan CPU.

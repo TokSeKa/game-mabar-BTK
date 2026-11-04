@@ -136,6 +136,11 @@ class Game:
         """Fungsi bantu tambahan untuk bot (nama → callable atau konstanta)."""
         return {}
 
+    def all_docs(self) -> list[dict[str, str]]:
+        """Fungsi dasar + fungsi game (fungsi game menang kalau namanya sama)."""
+        own = {d["nama"] for d in self.lib_docs}
+        return [d for d in BASE_DOCS if d["nama"] not in own] + list(self.lib_docs)
+
     def clean_settings(self, cfg: dict[str, Any] | None) -> dict[str, Any]:
         cfg = cfg or {}
         return {st.id: st.clean(cfg.get(st.id, st.default)) for st in self.settings}
@@ -145,7 +150,7 @@ class Game:
             "id": self.id, "nama": self.nama, "ringkas": self.ringkas, "kategori": self.kategori,
             "min_pemain": self.min_pemain, "max_pemain": self.max_pemain, "fungsi_bot": self.fungsi_bot,
             "timer": self.timer, "mandiri": self.mandiri, "settings": [x.meta() for x in self.settings],
-            "templates": self.templates, "lib_docs": BASE_DOCS + self.lib_docs, "label_skor": self.label_skor,
+            "templates": self.templates, "lib_docs": self.all_docs(), "label_skor": self.label_skor,
             "aturan": self.aturan, "format_aksi": self.format_aksi,
         }
 
