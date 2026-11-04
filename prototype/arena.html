@@ -1,0 +1,892 @@
+<title>Suit Bot Arena</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: arena panggung bundar di kiri (replay ronde), panel samping untuk pengaturan, klasemen, grafik. Satu tema malam yang disengaja. */
+:root {
+  --bg: #15122a;
+  --panel: #1e1a38;
+  --panel-2: #262046;
+  --stage: #221d44;
+  --stage-2: #2d2758;
+  --line: #3b3468;
+  --fg: #f3efff;
+  --muted: #a69fd0;
+  --screen: #120f24;
+  --eye: #bff3ff;
+  --batu: #f0a24a;
+  --batu-d: #a8641f;
+  --gunting: #3fd0c9;
+  --gunting-d: #1d8a85;
+  --kertas: #f37aa5;
+  --kertas-d: #b03f6a;
+  --good: #6be38a;
+  --bad: #ff6a6a;
+  --gold: #ffd166;
+  --font-display: "Bungee", "Arial Black", Impact, sans-serif;
+  --font-body: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --move: 850ms;
+  --flip: 600ms;
+  --hp: 900ms;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+* { box-sizing: border-box; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+.app {
+  max-width: 1200px; margin: 0 auto;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px;
+}
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 20px; }
+.top h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(26px, 4vw, 38px); line-height: 1; margin: 0; letter-spacing: .01em; }
+.top h1 .w1 { color: var(--batu); } .top h1 .w2 { color: var(--gunting); } .top h1 .w3 { color: var(--kertas); }
+.top p { margin: 4px 0 0; color: var(--muted); max-width: 60ch; }
+.tag { font-family: var(--font-mono); font-size: 12px; color: var(--gold); border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent); padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
+@media (max-width: 920px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* HUD + fase */
+.hud { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; justify-content: space-between; }
+.hud-stats { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.hud-stats b { font-family: var(--font-mono); color: var(--fg); font-weight: 700; }
+.phases { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0; }
+.phases li { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; color: var(--muted); background: var(--panel); transition: background .25s, color .25s; }
+.phases li.on { background: var(--fg); color: var(--bg); }
+
+/* Panggung */
+.stage {
+  position: relative; width: 100%; max-width: 100%; aspect-ratio: 1 / 0.95;
+  border-radius: 28px; overflow: hidden;
+  background: radial-gradient(circle at 50% 50%, var(--stage-2) 0%, var(--stage) 62%, var(--panel) 100%);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.stage::before {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: var(--ring, 70%); aspect-ratio: 1; transform: translate(-50%, -50%);
+  border-radius: 50%; border: 2px dashed color-mix(in srgb, var(--muted) 30%, transparent);
+  transition: opacity .4s;
+}
+@media (min-width: 921px) { .stage { aspect-ratio: 1 / 0.8; } }
+.stage.boxes::before { opacity: 0; }
+.no-anim, .no-anim * { transition: none !important; }
+
+.center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; transition: opacity .35s; }
+.stage.boxes .center { opacity: 0; }
+.center .lbl { font-size: 11px; font-weight: 800; letter-spacing: .18em; color: var(--muted); text-transform: uppercase; }
+.center .num { font-family: var(--font-display); font-size: calc(var(--bs) * 1.05); line-height: 1; }
+.center .ph { font-size: calc(var(--bs) * .24 + 4px); color: var(--muted); margin-top: 4px; min-height: 1.5em; white-space: nowrap; }
+
+/* Kotak senjata */
+.box {
+  position: absolute; border-radius: 18px; opacity: 0; transform: scale(.92);
+  transition: opacity .35s, transform .35s, box-shadow .35s;
+  background: color-mix(in srgb, var(--wc) 10%, var(--stage));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--wc) 55%, transparent);
+  pointer-events: none;
+}
+.stage.boxes .box { opacity: 1; transform: none; }
+.box.batu { --wc: var(--batu); } .box.gunting { --wc: var(--gunting); } .box.kertas { --wc: var(--kertas); }
+.box.empty { opacity: .35 !important; }
+.box-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-weight: 800; font-size: 13px; color: var(--wc); }
+.box-head svg { width: 26px; height: 26px; flex: none; }
+.box-head .cnt { margin-left: auto; font-family: var(--font-mono); background: var(--wc); color: var(--screen); border-radius: 999px; padding: 0 8px; font-size: 12px; }
+.box-foot { position: absolute; left: 8px; right: 8px; bottom: 6px; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; font-weight: 700; opacity: 0; transition: opacity .3s; }
+.box.resolved .box-foot { opacity: 1; }
+.box-foot .in { color: var(--good); } .box-foot .out { color: var(--bad); }
+
+.arrows { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .35s; }
+.stage.boxes .arrows { opacity: 1; }
+.arrows path.a { fill: none; stroke-width: 3; stroke-linecap: round; opacity: .22; transition: opacity .3s, stroke-width .3s; }
+.arrows path.a.on { opacity: 1; stroke-width: 4; stroke-dasharray: 10 8; animation: dash 1s linear infinite; }
+.arrows text { font-family: var(--font-mono); font-size: 12px; font-weight: 700; opacity: 0; transition: opacity .3s; paint-order: stroke; stroke: var(--stage); stroke-width: 5px; stroke-linejoin: round; }
+.arrows text.on { opacity: 1; }
+@keyframes dash { to { stroke-dashoffset: -18; } }
+
+/* Bot */
+.bot { position: absolute; left: 0; top: 0; width: var(--bw); display: flex; flex-direction: column; align-items: center; transition: transform var(--move) cubic-bezier(.5,.05,.25,1), filter .4s, opacity .4s; will-change: transform; }
+.avatar { width: var(--bs); height: var(--bs); position: relative; }
+.avatar svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.robot .head { fill: var(--c); }
+.robot .ant { stroke: var(--c); }
+.robot .light { fill: var(--c); }
+.robot .scr { fill: var(--screen); }
+.robot .eyes rect { fill: var(--eye); }
+.robot .xeyes { stroke: var(--bad); stroke-width: 3.5; stroke-linecap: round; opacity: 0; }
+.bot.thinking .robot .eyes { animation: look 1.1s ease-in-out infinite; }
+.bot.thinking .robot .light { animation: blink .5s steps(2) infinite; }
+@keyframes look { 0%,100% { transform: translateX(-3px); } 50% { transform: translateX(3px); } }
+@keyframes blink { 50% { fill: var(--gold); } }
+.bot.out { filter: grayscale(1) brightness(.55); opacity: .55; }
+.bot.out .robot .eyes { opacity: 0; } .bot.out .robot .xeyes { opacity: 1; }
+.bot.hit .avatar { animation: shake .45s; }
+.bot.gain .avatar { animation: hop .5s; }
+@keyframes shake { 20% { transform: translateX(-5px) rotate(-6deg); } 40% { transform: translateX(5px) rotate(6deg); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+@keyframes hop { 40% { transform: translateY(-9px) scale(1.06); } }
+
+.name { margin-top: 2px; font-weight: 800; font-size: calc(var(--bs) * .24); line-height: 1.15; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hpbar { position: relative; width: 82%; height: calc(var(--bs) * .1 + 2px); margin-top: 3px; border-radius: 99px; background: var(--screen); overflow: hidden; }
+.hpbar .ghost, .hpbar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; }
+.hpbar .ghost { background: var(--bad); transition: width var(--hp) ease var(--hp); }
+.hpbar .fill { background: var(--good); transition: width var(--hp) ease, background .3s; }
+.bot.over .hpbar .fill { background: var(--gold); }
+.hpnum { font-family: var(--font-mono); font-weight: 700; font-size: calc(var(--bs) * .22); line-height: 1.2; color: var(--muted); }
+.bot.over .hpnum { color: var(--gold); }
+
+.bubble { position: absolute; display: flex; gap: 3px; align-items: center; justify-content: center; padding: 4px 7px; border-radius: 12px 12px 12px 3px; background: var(--fg); opacity: 0; transform: scale(.6); transform-origin: left bottom; transition: opacity .2s, transform .2s; }
+.bubble i { width: 5px; height: 5px; border-radius: 50%; background: var(--bg); animation: dots 1s infinite; }
+.bubble i:nth-child(2) { animation-delay: .15s; } .bubble i:nth-child(3) { animation-delay: .3s; }
+.bubble b { display: none; font-size: 12px; line-height: 1; color: var(--bg); font-weight: 800; }
+.bot.thinking .bubble, .bot.decided .bubble { opacity: 1; transform: none; }
+.bot.decided .bubble i { display: none; } .bot.decided .bubble b { display: block; }
+@keyframes dots { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-3px); opacity: 1; } }
+
+.card { position: absolute; width: var(--cs); height: var(--cs); perspective: 400px; opacity: 0; transform: scale(.5); transition: opacity .25s, transform .25s; }
+.bot.carded .card { opacity: 1; transform: none; }
+.stage.boxes .card { opacity: 0 !important; }
+.card-inner { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform var(--flip) cubic-bezier(.4,1.6,.5,1); }
+.bot.revealed .card-inner { transform: rotateY(180deg); }
+.card-face { position: absolute; inset: 0; border-radius: 10px; backface-visibility: hidden; display: grid; place-items: center; }
+.card-back { background: repeating-linear-gradient(45deg, var(--panel-2) 0 6px, var(--line) 6px 12px); box-shadow: inset 0 0 0 2px var(--c); font-family: var(--font-display); color: var(--c); font-size: calc(var(--cs) * .45); }
+.card-front { transform: rotateY(180deg); background: var(--fg); box-shadow: 0 6px 16px rgba(0,0,0,.35); }
+.card-front svg { width: 80%; height: 80%; }
+
+.float { position: absolute; left: 50%; top: 0; transform: translate(-50%, 0); font-family: var(--font-mono); font-weight: 700; font-size: calc(var(--bs) * .34 + 3px); pointer-events: none; opacity: 0; white-space: nowrap; text-shadow: 0 2px 0 var(--screen); }
+.float.pos { color: var(--good); } .float.neg { color: var(--bad); }
+.float.pop { animation: floatUp calc(var(--hp) * 1.8) ease-out forwards; }
+@keyframes floatUp { 0% { opacity: 0; transform: translate(-50%, 0) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); } 70% { opacity: 1; transform: translate(-50%, -110%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -150%); } }
+
+.particle { position: absolute; left: 0; top: 0; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; pointer-events: none; box-shadow: 0 0 10px currentColor; background: currentColor; }
+
+/* Layar akhir */
+.end { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(3px); z-index: 30; }
+.end-card { text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; max-width: 100%; }
+.end-card h2 { font-family: var(--font-display); font-weight: 400; font-size: clamp(22px, 4vw, 34px); margin: 0; color: var(--gold); }
+.end-card p { margin: 0; color: var(--muted); max-width: 42ch; }
+.podium { display: flex; align-items: flex-end; gap: 10px; }
+.pod { display: flex; flex-direction: column; align-items: center; gap: 4px; width: clamp(70px, 18vw, 110px); }
+.pod .av { width: 70%; }
+.pod .blk { width: 100%; border-radius: 10px 10px 0 0; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); display: grid; place-items: center; font-family: var(--font-display); font-size: 22px; }
+.pod.p1 .blk { height: 86px; color: var(--gold); } .pod.p2 .blk { height: 60px; } .pod.p3 .blk { height: 42px; }
+.pod .nm { font-weight: 800; font-size: 14px; } .pod .hp { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.end-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* Kontrol */
+.controls { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 12px; padding: 8px 14px; background: var(--panel-2); font-weight: 700; font-size: 14px; box-shadow: inset 0 0 0 1px var(--line); }
+.btn:hover { background: var(--line); }
+.btn.primary { background: var(--fg); color: var(--bg); box-shadow: none; }
+.btn.primary:hover { background: var(--gold); }
+.btn svg { width: 16px; height: 16px; }
+.seg { display: inline-flex; border-radius: 12px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
+.seg button { border: 0; background: transparent; padding: 8px 11px; font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.scrub { flex: 1 1 200px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.scrub input { flex: 1; min-width: 0; accent-color: var(--gold); }
+.scrub output { font-family: var(--font-mono); font-size: 13px; color: var(--muted); white-space: nowrap; }
+
+/* Ledger pembagian poin */
+.ledger { background: var(--panel); border-radius: 18px; padding: 14px 16px; box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 10px; min-height: 120px; }
+.ledger h3, .panel h3 { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.ledger .empty-note { color: var(--muted); font-size: 14px; }
+.pair { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--panel-2); }
+.pair .vs { display: flex; align-items: center; gap: 4px; font-weight: 800; font-size: 13px; }
+.pair .vs svg { width: 28px; height: 28px; }
+.pair .vs .gt { color: var(--muted); font-family: var(--font-mono); }
+.pair .eq { font-size: 14px; min-width: 0; }
+.pair .eq b { font-family: var(--font-mono); }
+.pair .eq .m { color: var(--bad); } .pair .eq .p { color: var(--good); }
+.pair .rem { grid-column: 2; font-size: 13px; color: var(--gold); }
+.pair .cap { grid-column: 2; font-size: 12px; color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 4px; border-radius: 999px; background: var(--screen); font-size: 12.5px; font-weight: 700; white-space: nowrap; margin: 1px 0; }
+.chip::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.net { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+.net .chip b { font-family: var(--font-mono); }
+.net .chip b.p { color: var(--good); } .net .chip b.m { color: var(--bad); } .net .chip b.z { color: var(--muted); }
+
+/* Panel samping */
+.panel { background: var(--panel); border-radius: 18px; padding: 14px 16px; box-shadow: inset 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.panel .hint { font-size: 12.5px; color: var(--muted); margin: 0; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.field { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); font-weight: 700; }
+.field input { width: 100%; background: var(--screen); border: 1px solid var(--line); border-radius: 10px; padding: 6px 9px; font-family: var(--font-mono); font-size: 14px; }
+.scen { display: flex; flex-wrap: wrap; gap: 6px; }
+.scen button { border: 0; border-radius: 999px; padding: 5px 12px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); font-weight: 700; font-size: 13px; }
+.scen button[aria-pressed="true"] { background: var(--gold); color: var(--bg); box-shadow: none; }
+
+.board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.board li { display: grid; grid-template-columns: 22px 18px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 10px; background: var(--panel-2); font-size: 14px; }
+.board li.out { opacity: .5; }
+.board .rk { font-family: var(--font-mono); color: var(--muted); font-size: 12px; }
+.board .dot { width: 14px; height: 14px; border-radius: 5px; background: var(--c); }
+.board .nm { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board .nm small { display: block; font-weight: 600; color: var(--muted); font-size: 11.5px; }
+.board .v { font-family: var(--font-mono); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.board .v small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
+.toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); font-weight: 700; }
+.toggle input { accent-color: var(--gold); width: 16px; height: 16px; }
+
+.chart svg { width: 100%; height: auto; display: block; }
+.chart .ax { stroke: var(--line); stroke-width: 1; }
+.chart .tk { fill: var(--muted); font-family: var(--font-mono); font-size: 9px; }
+.chart polyline { fill: none; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bot, .card-inner, .hpbar .fill, .hpbar .ghost { transition-duration: 1ms !important; transition-delay: 0ms !important; }
+  .arrows path.a.on, .bubble i, .bot.thinking .robot .eyes { animation: none; }
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div>
+      <h1><span class="w1">Suit</span> <span class="w2">Bot</span> <span class="w3">Arena</span></h1>
+      <p>Prototipe visual replay. Bot-bot di sini memakai strategi dummy sederhana, tapi aturan HP dan pembagian poinnya sudah sama dengan rencana game asli.</p>
+    </div>
+    <span class="tag">PROTOTIPE · DATA DUMMY</span>
+  </header>
+
+  <div class="layout">
+    <section class="col" aria-label="Arena">
+      <div class="hud">
+        <div class="hud-stats">
+          <span>Ronde <b id="hudRound">1</b> / <b id="hudMax">100</b></span>
+          <span>Hidup <b id="hudAlive">8</b></span>
+          <span>Total HP <b id="hudTotal">8000</b></span>
+          <span>Ingatan bot <b id="hudMem">10</b> ronde</span>
+        </div>
+        <ol class="phases" id="phases">
+          <li data-p="think">Berpikir</li><li data-p="reveal">Pilih</li><li data-p="gather">Kumpul</li><li data-p="resolve">Bagi poin</li>
+        </ol>
+      </div>
+
+      <div class="stage" id="stage">
+        <svg class="arrows" id="arrows"></svg>
+        <div class="box batu" id="box-batu"><div class="box-head"></div><div class="box-foot"></div></div>
+        <div class="box gunting" id="box-gunting"><div class="box-head"></div><div class="box-foot"></div></div>
+        <div class="box kertas" id="box-kertas"><div class="box-head"></div><div class="box-foot"></div></div>
+        <div class="center"><div class="lbl">Ronde</div><div class="num" id="cNum">1</div><div class="ph" id="cPh">Bersiap…</div></div>
+        <div id="bots"></div>
+        <div class="end" id="end" hidden></div>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="bPlay" type="button"></button>
+        <button class="btn" id="bPrev" type="button" aria-label="Ronde sebelumnya">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg>Mundur</button>
+        <button class="btn" id="bNext" type="button" aria-label="Ronde berikutnya">Maju
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 2h2v12h-2zM2 2v12l8-6z"/></svg></button>
+        <div class="seg" role="group" aria-label="Kecepatan" id="speed">
+          <button type="button" data-s="1" aria-pressed="true">1×</button><button type="button" data-s="2" aria-pressed="false">2×</button><button type="button" data-s="4" aria-pressed="false">4×</button><button type="button" data-s="8" aria-pressed="false">8×</button>
+        </div>
+        <button class="btn" id="bEnd" type="button">Lewati ke akhir</button>
+        <label class="scrub" for="scrub"><input type="range" id="scrub" min="1" max="10" value="1"><output id="scrubOut">R1</output></label>
+      </div>
+
+      <div class="ledger" id="ledger" aria-live="polite">
+        <h3>Pembagian poin</h3>
+        <div class="empty-note">Rincian siapa kehilangan HP dan siapa menyerapnya muncul di sini setiap ronde.</div>
+      </div>
+    </section>
+
+    <aside class="col" aria-label="Panel room">
+      <div class="panel">
+        <h3>Room &amp; aturan</h3>
+        <div class="scen" id="scen"></div>
+        <div class="fields">
+          <label class="field" for="fHp">HP awal<input id="fHp" type="number" min="100" max="100000" step="100" value="1000"></label>
+          <label class="field" for="fLoss">HP hilang saat kalah<input id="fLoss" type="number" min="1" max="100000" step="10" value="100"></label>
+          <label class="field" for="fMax">Batas ronde<input id="fMax" type="number" min="1" max="500" value="100"></label>
+          <label class="field" for="fMem">Ingatan bot (ronde)<input id="fMem" type="number" min="1" max="50" value="10"></label>
+        </div>
+        <button class="btn" id="bApply" type="button">Terapkan &amp; mulai ulang</button>
+        <p class="hint">Di game asli pengaturan ini dipegang host room. Bot hanya bisa melihat riwayat sebanyak "ingatan" ronde terakhir dan tidak punya variabel memori sendiri.</p>
+      </div>
+
+      <div class="panel">
+        <h3>Klasemen</h3>
+        <ol class="board" id="board"></ol>
+        <label class="toggle" for="fBrain"><input type="checkbox" id="fBrain"> Tampilkan otak bot (rahasia di game asli)</label>
+      </div>
+
+      <div class="panel chart">
+        <h3>HP per ronde</h3>
+        <div id="chart"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+// ---------- Aturan & simulasi (deterministik, tanpa random) ----------
+const ORDER = ['batu', 'gunting', 'kertas'];
+const BEATS = { batu: 'gunting', gunting: 'kertas', kertas: 'batu' };     // kunci mengalahkan nilai
+const BEATEN_BY = { gunting: 'batu', kertas: 'gunting', batu: 'kertas' }; // nilai mengalahkan kunci
+const LABEL = { batu: 'Batu', gunting: 'Gunting', kertas: 'Kertas' };
+const mostOf = c => { let b = ORDER[0]; for (const w of ORDER) if (c[w] > c[b]) b = w; return b; };
+const leastOf = c => { let b = ORDER[0]; for (const w of ORDER) if (c[w] < c[b]) b = w; return b; };
+const leaderOther = v => { let best = -1; for (const i of v.alive) { if (i === v.me) continue; if (best < 0 || v.hp[i] > v.hp[best]) best = i; } return best; };
+
+const BRAINS = {
+  pemutar:  { label: 'Pemutar', desc: 'Berputar batu, kertas, gunting.', fn: v => ['batu', 'kertas', 'gunting'][(v.round - 1) % 3] },
+  anti:     { label: 'Anti Mayoritas', desc: 'Melawan senjata terpopuler ronde lalu.', fn: v => { const l = v.history.at(-1); return l ? BEATEN_BY[mostOf(l.counts)] : 'kertas'; } },
+  minor:    { label: 'Minoritas', desc: 'Memilih senjata paling sepi ronde lalu.', fn: v => { const l = v.history.at(-1); return l ? leastOf(l.counts) : 'gunting'; } },
+  peniru:   { label: 'Peniru Juara', desc: 'Meniru pilihan lawan ber-HP tertinggi.', fn: v => { const l = v.history.at(-1); if (!l) return 'batu'; return l.choices[leaderOther(v)] || 'batu'; } },
+  pengamat: { label: 'Pengamat', desc: 'Melawan senjata terbanyak dalam ingatannya.', fn: v => { const t = { batu: 0, gunting: 0, kertas: 0 }; for (const h of v.history) for (const w of ORDER) t[w] += h.counts[w]; return v.history.length ? BEATEN_BY[mostOf(t)] : 'batu'; } },
+  mayor:    { label: 'Ikut Arus', desc: 'Ikut senjata terpopuler ronde lalu.', fn: v => { const l = v.history.at(-1); return l ? mostOf(l.counts) : 'kertas'; } },
+  ekor:     { label: 'Pencari Cuan', desc: 'Ikut senjata yang paling untung ronde lalu.', fn: v => { const l = v.history.at(-1); if (!l) return 'gunting'; const g = { batu: 0, gunting: 0, kertas: 0 }; for (const k in l.choices) g[l.choices[k]] += l.delta[k]; return mostOf(g); } },
+  pemenang: { label: 'Bertahan Menang', desc: 'Menang? ulangi. Kalah? pakai penakluknya.', fn: v => { const l = v.history.at(-1); if (!l) return 'kertas'; const m = l.choices[v.me]; return l.delta[v.me] > 0 ? m : BEATEN_BY[m]; } },
+  batu:     { label: 'Si Batu', desc: 'Selalu batu. Selalu.', fn: () => 'batu' },
+  pemburu:  { label: 'Pemburu Juara', desc: 'Menyerang pilihan terakhir lawan ber-HP tertinggi.', fn: v => { const l = v.history.at(-1); if (!l) return 'kertas'; return BEATEN_BY[l.choices[leaderOther(v)] || 'batu']; } },
+  hati:     { label: 'Hati-hati', desc: 'Melawan mayoritas; kalau HP < 400 sembunyi di minoritas.', fn: v => { const l = v.history.at(-1); if (!l) return 'batu'; return v.myHp < 400 ? leastOf(l.counts) : BEATEN_BY[mostOf(l.counts)]; } },
+};
+const SCENARIOS = {
+  mabar8: { label: 'Mabar 8 pemain', brains: ['pemutar', 'anti', 'minor', 'peniru', 'pengamat', 'mayor', 'ekor', 'pemenang'] },
+  ber4:   { label: 'Ber-4', brains: ['batu', 'minor', 'pemburu', 'hati'] },
+  duel:   { label: 'Duel 1v1', brains: ['pengamat', 'ekor'] },
+};
+const NAMES = ['Budi', 'Ani', 'Citra', 'Dodi', 'Eka', 'Fajar', 'Gita', 'Hana'];
+const COLORS = ['#7aa2ff', '#c29bff', '#ffd166', '#6ee7a8', '#ff9f7a', '#5ad1e6', '#f7a8d8', '#c9d36a'];
+
+function simulate(brains, cfg) {
+  const n = brains.length;
+  let hp = brains.map(() => cfg.hp);
+  const rounds = [], log = [];
+  for (let r = 1; r <= cfg.maxRounds; r++) {
+    const alive = [...Array(n).keys()].filter(i => hp[i] > 0);
+    if (alive.length <= 1) break;
+    const history = log.slice(-cfg.memory);
+    const choices = {};
+    for (const i of alive) {
+      let w;
+      try { w = BRAINS[brains[i]].fn({ round: r, me: i, myHp: hp[i], hp: hp.slice(), alive, history, startHp: cfg.hp }); } catch (e) { w = 'batu'; }
+      if (!ORDER.includes(w)) w = 'batu';
+      choices[i] = w;
+    }
+    const groups = { batu: [], gunting: [], kertas: [] };
+    for (const i of alive) groups[choices[i]].push(i);
+    const delta = Array(n).fill(0), pairs = [];
+    for (const W of ORDER) {
+      const L = BEATS[W];
+      if (!groups[W].length || !groups[L].length) continue;
+      const losers = groups[L].map(i => ({ id: i, amt: Math.min(cfg.loss, hp[i]) }));
+      const pool = losers.reduce((a, b) => a + b.amt, 0);
+      const winners = groups[W];
+      const share = Math.floor(pool / winners.length);
+      const rem = pool - share * winners.length;
+      // sisa tidak dibuang: +1 ke pemenang ber-HP terendah dulu (seri: urutan masuk room)
+      const remIds = [...winners].sort((a, b) => hp[a] - hp[b] || a - b).slice(0, rem);
+      losers.forEach(l => { delta[l.id] -= l.amt; });
+      winners.forEach(i => { delta[i] += share; });
+      remIds.forEach(i => { delta[i] += 1; });
+      pairs.push({ win: W, lose: L, losers, pool, winners, share, remIds });
+    }
+    const before = hp.slice();
+    hp = hp.map((h, i) => h + delta[i]);
+    const counts = { batu: groups.batu.length, gunting: groups.gunting.length, kertas: groups.kertas.length };
+    rounds.push({ r, alive, choices, groups, pairs, delta, before, after: hp.slice(), elim: alive.filter(i => hp[i] <= 0), counts });
+    log.push({ counts, choices, delta: delta.slice() });
+  }
+  return rounds;
+}
+
+// ---------- Aset SVG ----------
+const ICON = {
+  batu: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M9 31 L13 17 L24 9 L37 14 L41 28 L34 39 L16 40 Z" fill="var(--batu)"/><path d="M13 17 L22 22 L24 9 M22 22 L34 26 L37 14 M34 26 L34 39 M22 22 L16 40" stroke="var(--batu-d)" stroke-width="2" fill="none" stroke-linejoin="round"/></svg>',
+  gunting: '<svg viewBox="0 0 48 48" aria-hidden="true"><g stroke="var(--gunting)" stroke-width="4" stroke-linecap="round" fill="none"><path d="M20 30 L33 7"/><path d="M28 30 L15 7"/><circle cx="16" cy="36" r="6"/><circle cx="32" cy="36" r="6"/></g><circle cx="24" cy="23" r="2.6" fill="var(--gunting-d)"/></svg>',
+  kertas: '<svg viewBox="0 0 48 48" aria-hidden="true"><g transform="rotate(-6 24 24)"><path d="M13 7 H30 L37 14 V41 H13 Z" fill="var(--kertas)"/><path d="M30 7 V14 H37 Z" fill="var(--kertas-d)"/><path d="M18 21 H32 M18 27 H32 M18 33 H27" stroke="var(--kertas-d)" stroke-width="2.4" stroke-linecap="round"/></g></svg>',
+};
+const ROBOT = '<svg viewBox="0 0 64 64" class="robot" aria-hidden="true"><line class="ant" x1="32" y1="5" x2="32" y2="14" stroke-width="3"/><circle class="light" cx="32" cy="5" r="4"/><rect class="head" x="4" y="28" width="6" height="13" rx="3"/><rect class="head" x="54" y="28" width="6" height="13" rx="3"/><rect class="head" x="8" y="13" width="48" height="43" rx="14"/><rect class="scr" x="15" y="22" width="34" height="22" rx="8"/><g class="eyes"><rect x="21" y="28" width="7" height="10" rx="3.5"/><rect x="36" y="28" width="7" height="10" rx="3.5"/></g><g class="xeyes"><path d="M21 28 l7 9 M28 28 l-7 9 M36 28 l7 9 M43 28 l-7 9"/></g></svg>';
+
+// ---------- State ----------
+const $ = id => document.getElementById(id);
+const stage = $('stage'), botsEl = $('bots');
+let scenario = 'mabar8';
+let cfg = { hp: 1000, loss: 100, maxRounds: 100, memory: 10 };
+let players = [], rounds = [];
+let speed = 1, paused = false, token = 0, running = false;
+let cur = 0;               // indeks ronde yang sedang/akan diputar
+let hpShown = [];
+let geo = {};
+let mode = 'circle';       // 'circle' | 'boxes'
+let showBrain = false;
+try { showBrain = localStorage.getItem('sba-brain') === '1'; } catch (e) {}
+$('fBrain').checked = showBrain;
+
+function setup() {
+  token++; running = false;
+  const brains = SCENARIOS[scenario].brains;
+  players = brains.map((b, i) => ({ id: i, name: NAMES[i], color: COLORS[i], brain: b }));
+  rounds = simulate(brains, cfg);
+  hpShown = players.map(() => cfg.hp);
+  cur = 0;
+  botsEl.innerHTML = '';
+  players.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'bot';
+    el.style.setProperty('--c', p.color);
+    el.innerHTML = `<div class="bubble"><i></i><i></i><i></i><b>!</b></div>
+      <div class="card"><div class="card-inner"><div class="card-face card-back">?</div><div class="card-face card-front"></div></div></div>
+      <div class="avatar">${ROBOT}<div class="float"></div></div>
+      <div class="name">${p.name}</div>
+      <div class="hpbar"><div class="ghost"></div><div class="fill"></div></div>
+      <div class="hpnum">${cfg.hp}</div>`;
+    p.el = el;
+    botsEl.appendChild(el);
+  });
+  $('scrub').max = String(rounds.length);
+  $('hudMax').textContent = cfg.maxRounds;
+  $('hudMem').textContent = cfg.memory;
+  $('end').hidden = true;
+  measure();
+  jumpTo(0, true);
+}
+
+// ---------- Geometri ----------
+function measure() {
+  const W = stage.clientWidth, H = stage.clientHeight;
+  const m = Math.min(W, H);
+  const bs = Math.max(32, Math.min(64, m * 0.095));
+  const bw = bs * 1.75;
+  const R = m * 0.37;
+  geo = { W, H, bs, bw, R, cs: bs * 0.85 };
+  stage.style.setProperty('--bs', bs + 'px');
+  stage.style.setProperty('--bw', bw + 'px');
+  stage.style.setProperty('--cs', geo.cs + 'px');
+  stage.style.setProperty('--ring', (R * 2 / W * 100) + '%');
+  const bwx = W * 0.39, bhx = H * 0.34;
+  geo.boxes = {
+    batu:    { x: W * 0.5 - bwx / 2,  y: H * 0.04, w: bwx, h: bhx },
+    gunting: { x: W * 0.975 - bwx,    y: H * 0.6,  w: bwx, h: bhx },
+    kertas:  { x: W * 0.025,          y: H * 0.6,  w: bwx, h: bhx },
+  };
+  for (const w of ORDER) {
+    const b = geo.boxes[w], el = $('box-' + w);
+    Object.assign(el.style, { left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px' });
+  }
+  drawArrows();
+}
+function place(p, cx, cy, k) {
+  const { bw, bs } = geo;
+  p.el.style.transformOrigin = `${bw / 2}px ${bs / 2}px`;
+  p.el.style.transform = `translate(${cx - bw / 2}px, ${cy - bs / 2}px) scale(${k})`;
+}
+function seat(i) {
+  const n = players.length, a = -Math.PI / 2 + 2 * Math.PI * i / n;
+  return { x: geo.W / 2 + geo.R * Math.cos(a), y: geo.H / 2 + geo.R * Math.sin(a), a };
+}
+function layoutCircle() {
+  mode = 'circle';
+  stage.classList.remove('boxes');
+  const { bs, bw, cs } = geo;
+  players.forEach(p => {
+    const s = seat(p.id);
+    place(p, s.x, s.y, 1);
+    const dx = -Math.cos(s.a) * bs * 1.7, dy = -Math.sin(s.a) * bs * 1.7;
+    const card = p.el.querySelector('.card');
+    card.style.left = (bw / 2 + dx - cs / 2) + 'px';
+    card.style.top = (bs / 2 + dy - cs / 2) + 'px';
+    const bub = p.el.querySelector('.bubble');
+    bub.style.left = (bw / 2 + bs * 0.32) + 'px';
+    bub.style.top = (-bs * 0.42) + 'px';
+  });
+}
+function layoutBoxes(R) {
+  mode = 'boxes';
+  stage.classList.add('boxes');
+  const { bs, bw } = geo;
+  for (const w of ORDER) {
+    const b = geo.boxes[w], ids = R.groups[w];
+    const head = Math.max(30, b.h * 0.17), foot = 22;
+    const n = ids.length, cols = Math.min(4, Math.max(1, n)), rows = n > 4 ? 2 : 1;
+    const slotW = b.w / 4, areaH = b.h - head - foot, slotH = areaH / 2;
+    const k = Math.min(0.8, (slotW * 0.98) / bw, slotH / (bs * 1.95));
+    const offX = (b.w - cols * slotW) / 2;
+    const offY = rows === 1 ? (areaH - slotH) / 2 : 0;
+    ids.forEach((id, j) => {
+      const c = j % 4, r = Math.floor(j / 4);
+      const cx = b.x + offX + slotW * (c + 0.5);
+      const cy = b.y + head + offY + slotH * r + slotH * 0.36;
+      place(players[id], cx, cy, k);
+    });
+  }
+  // yang sudah gugur tetap di kursinya
+  players.forEach(p => { if (!R.alive.includes(p.id)) { const s = seat(p.id); place(p, s.x, s.y, 0.85); } });
+}
+
+function boxEdge(b, tx, ty) {
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2, dx = tx - cx, dy = ty - cy;
+  const t = Math.min((b.w / 2 + 6) / Math.abs(dx || 1e-6), (b.h / 2 + 6) / Math.abs(dy || 1e-6));
+  return { x: cx + dx * t, y: cy + dy * t };
+}
+function boxCenter(w) { const b = geo.boxes[w]; return { x: b.x + b.w / 2, y: b.y + b.h / 2 }; }
+function drawArrows() {
+  const { W, H } = geo, svg = $('arrows');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const mid = { x: W / 2, y: H * 0.56 };
+  let s = '<defs>';
+  for (const w of ORDER) s += `<marker id="m-${w}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--${w})"/></marker>`;
+  s += '</defs>';
+  for (const W2 of ORDER) {
+    const L = BEATS[W2], a = boxCenter(W2), b = boxCenter(L);
+    const p1 = boxEdge(geo.boxes[W2], b.x, b.y), p2 = boxEdge(geo.boxes[L], a.x, a.y);
+    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+    const ox = mx - mid.x, oy = my - mid.y, ol = Math.hypot(ox, oy) || 1;
+    const bend = Math.min(W, H) * 0.06;
+    const c = { x: mx + ox / ol * bend, y: my + oy / ol * bend };
+    s += `<path class="a" id="ar-${W2}" d="M${p1.x} ${p1.y} Q${c.x} ${c.y} ${p2.x} ${p2.y}" stroke="var(--${W2})" marker-end="url(#m-${W2})"/>`;
+    const tx = mx * 0.5 + c.x * 0.5 + ox / ol * 24, ty = my * 0.5 + c.y * 0.5 + oy / ol * 24;
+    s += `<text id="at-${W2}" x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle" fill="var(--${W2})"></text>`;
+  }
+  svg.innerHTML = s;
+}
+
+// ---------- Render helper ----------
+function setHp(p, hp, animate) {
+  const fill = p.el.querySelector('.fill'), ghost = p.el.querySelector('.ghost');
+  const pct = Math.max(0, Math.min(1, hp / cfg.hp)) * 100;
+  const prev = hpShown[p.id];
+  if (!animate || hp >= prev) ghost.style.transition = 'none';
+  fill.style.width = pct + '%';
+  ghost.style.width = pct + '%';
+  if (!animate || hp >= prev) { void ghost.offsetWidth; ghost.style.transition = ''; }
+  p.el.querySelector('.hpnum').textContent = hp;
+  p.el.classList.toggle('over', hp > cfg.hp);
+  hpShown[p.id] = hp;
+}
+function setOut(p, out) { p.el.classList.toggle('out', out); }
+function clearBotState() {
+  players.forEach(p => p.el.classList.remove('thinking', 'decided', 'carded', 'revealed', 'hit', 'gain'));
+}
+function setPhase(ph, text) {
+  for (const li of $('phases').children) li.classList.toggle('on', li.dataset.p === ph);
+  if (text != null) $('cPh').textContent = text;
+}
+function setRoundUI(idx) {
+  const R = rounds[idx];
+  const rn = R ? R.r : (rounds.length ? rounds.at(-1).r : 1);
+  $('cNum').textContent = rn;
+  $('hudRound').textContent = rn;
+  $('scrub').value = String(Math.min(idx + 1, rounds.length));
+  $('scrubOut').textContent = 'R' + rn;
+}
+function updateHud() {
+  $('hudAlive').textContent = hpShown.filter(h => h > 0).length + '/' + players.length;
+  $('hudTotal').textContent = hpShown.reduce((a, b) => a + b, 0);
+}
+function chip(id) { const p = players[id]; return `<span class="chip" style="--c:${p.color}">${p.name}</span>`; }
+function chips(ids) { return ids.map(chip).join(' '); }
+
+function renderLedger(R) {
+  const L = $('ledger');
+  let h = `<h3>Pembagian poin · Ronde ${R.r}</h3>`;
+  if (!R.pairs.length) {
+    const only = ORDER.filter(w => R.counts[w]);
+    h += `<div class="empty-note">Semua bot memilih <b>${LABEL[only[0]]}</b>. Seri, tidak ada HP yang berpindah.</div>`;
+  } else {
+    for (const pr of R.pairs) {
+      const capped = pr.losers.filter(l => l.amt < cfg.loss);
+      h += `<div class="pair"><div class="vs">${ICON[pr.win]}<span class="gt">&gt;</span>${ICON[pr.lose]}</div>
+        <div class="eq">${chips(pr.losers.map(l => l.id))} <b class="m">−${cfg.loss}</b>${pr.losers.length > 1 ? ' per bot' : ''} = <b>${pr.pool} HP</b>
+        → diserap ${chips(pr.winners)} <b class="p">+${pr.share}</b>${pr.winners.length > 1 ? ' per bot' : ''}</div>
+        ${capped.length ? `<div class="cap">${capped.map(l => `${players[l.id].name} hanya punya ${l.amt} HP`).join(', ')}, jadi hanya itu yang terambil.</div>` : ''}
+        ${pr.remIds.length ? `<div class="rem">Sisa ${pr.remIds.length} HP dibagi ke HP terendah: ${pr.remIds.map(i => `+1 ${players[i].name}`).join(', ')}</div>` : ''}
+      </div>`;
+    }
+  }
+  h += `<div class="net">Hasil bersih: ${R.alive.map(i => { const d = R.delta[i]; const p = players[i]; return `<span class="chip" style="--c:${p.color}">${p.name} <b class="${d > 0 ? 'p' : d < 0 ? 'm' : 'z'}">${d > 0 ? '+' : ''}${d}</b></span>`; }).join(' ')}</div>`;
+  if (R.elim.length) h += `<div class="rem">Gugur ronde ini: ${R.elim.map(i => players[i].name).join(', ')}</div>`;
+  L.innerHTML = h;
+}
+function resetLedger() {
+  $('ledger').innerHTML = '<h3>Pembagian poin</h3><div class="empty-note">Rincian siapa kehilangan HP dan siapa menyerapnya muncul di sini setiap ronde.</div>';
+}
+
+function elimRound(id) { const R = rounds.find(r => r.elim.includes(id)); return R ? R.r : null; }
+// peringkat: HP terbanyak; kalau sama-sama gugur, yang bertahan lebih lama di atas
+function rankOrder(hp) {
+  const alive = id => hp[id] > 0 ? Infinity : (elimRound(id) ?? 0);
+  return players.map(p => p.id).sort((a, b) => hp[b] - hp[a] || alive(b) - alive(a) || a - b);
+}
+function renderBoard() {
+  const order = rankOrder(hpShown);
+  $('board').innerHTML = order.map((id, k) => {
+    const p = players[id], hp = hpShown[id], out = hp <= 0;
+    const er = out ? elimRound(id) : null;
+    return `<li class="${out ? 'out' : ''}" style="--c:${p.color}"><span class="rk">${k + 1}</span><span class="dot"></span>
+      <span class="nm">${p.name}${showBrain ? `<small>${BRAINS[p.brain].label}: ${BRAINS[p.brain].desc}</small>` : ''}</span>
+      <span class="v">${hp}${out ? `<small>gugur R${er}</small>` : ''}</span></li>`;
+  }).join('');
+}
+function renderChart(upto) { // upto = jumlah ronde yang sudah selesai
+  const Wc = 300, Hc = 150, pl = 30, pr = 8, pt = 8, pb = 18;
+  const total = Math.max(1, rounds.length);
+  let maxHp = cfg.hp;
+  rounds.forEach(R => R.after.forEach(h => { if (h > maxHp) maxHp = h; }));
+  const step = maxHp > 4000 ? 2000 : maxHp > 2000 ? 1000 : 500;
+  const yMax = Math.ceil(maxHp / step) * step;
+  const x = r => pl + (Wc - pl - pr) * r / total, y = h => pt + (Hc - pt - pb) * (1 - h / yMax);
+  let s = `<svg viewBox="0 0 ${Wc} ${Hc}" role="img" aria-label="Grafik HP tiap bot per ronde">`;
+  for (const v of [0, yMax / 2, yMax]) s += `<line class="ax" x1="${pl}" x2="${Wc - pr}" y1="${y(v)}" y2="${y(v)}"/><text class="tk" x="${pl - 4}" y="${y(v) + 3}" text-anchor="end">${v}</text>`;
+  s += `<text class="tk" x="${pl}" y="${Hc - 4}">R0</text><text class="tk" x="${Wc - pr}" y="${Hc - 4}" text-anchor="end">R${total}</text>`;
+  for (const p of players) {
+    const pts = [[0, cfg.hp]];
+    for (let k = 0; k < upto; k++) { pts.push([rounds[k].r, rounds[k].after[p.id]]); if (rounds[k].after[p.id] <= 0) break; }
+    s += `<polyline stroke="${p.color}" points="${pts.map(([r, h]) => `${x(r).toFixed(1)},${y(h).toFixed(1)}`).join(' ')}"/>`;
+  }
+  $('chart').innerHTML = s + '</svg>';
+}
+function renderBoxes(R, resolved) {
+  for (const w of ORDER) {
+    const el = $('box-' + w);
+    el.querySelector('.box-head').innerHTML = `${ICON[w]}<span>${LABEL[w]}</span><span class="cnt">${R.counts[w]}</span>`;
+    el.classList.toggle('empty', !R.counts[w]);
+    el.classList.toggle('resolved', !!resolved);
+    const gain = R.pairs.find(p => p.win === w), lose = R.pairs.find(p => p.lose === w);
+    const wide = geo.boxes[w].w >= 230;
+    el.querySelector('.box-foot').innerHTML =
+      (gain ? `<span class="in">+${gain.pool}${wide ? ' dari ' + LABEL[gain.lose].toLowerCase() : ''}</span>` : '') +
+      (lose ? `<span class="out">−${lose.pool}${wide ? ' ke ' + LABEL[lose.win].toLowerCase() : ''}</span>` : '');
+  }
+}
+function setArrows(R, labels) {
+  for (const w of ORDER) {
+    const pr = R && R.pairs.find(p => p.win === w);
+    const a = document.getElementById('ar-' + w), t = document.getElementById('at-' + w);
+    if (a) a.classList.toggle('on', !!pr);
+    if (t) { t.classList.toggle('on', !!pr && labels); t.textContent = pr ? `${pr.pool} HP` : ''; }
+  }
+}
+function particles(R, dur) {
+  for (const pr of R.pairs) {
+    const from = boxCenter(pr.lose), to = boxCenter(pr.win);
+    const n = Math.min(10, 3 + pr.losers.length * 2);
+    for (let k = 0; k < n; k++) {
+      const d = document.createElement('div');
+      d.className = 'particle';
+      d.style.color = `var(--${pr.lose})`;
+      stage.appendChild(d);
+      const jx = ((k * 37) % 21) - 10, jy = ((k * 53) % 21) - 10;
+      const anim = d.animate([
+        { transform: `translate(${from.x + jx}px, ${from.y + jy}px) scale(.6)`, opacity: 0 },
+        { opacity: 1, offset: 0.2 },
+        { transform: `translate(${to.x - jx}px, ${to.y - jy}px) scale(1)`, opacity: 0 },
+      ], { duration: dur, delay: k * dur * 0.06, easing: 'cubic-bezier(.5,0,.3,1)', fill: 'both' });
+      anim.onfinish = () => d.remove();
+      setTimeout(() => d.remove(), dur * 2 + 500);
+    }
+  }
+}
+function pop(p, d) {
+  const f = p.el.querySelector('.float');
+  f.textContent = (d > 0 ? '+' : '') + d;
+  f.className = 'float ' + (d > 0 ? 'pos' : 'neg');
+  void f.offsetWidth;
+  f.classList.add('pop');
+  p.el.classList.remove('hit', 'gain'); void p.el.offsetWidth;
+  p.el.classList.add(d > 0 ? 'gain' : 'hit');
+}
+
+// ---------- Timeline ----------
+function applySpeed() {
+  const root = document.documentElement.style;
+  root.setProperty('--move', Math.round(850 / speed) + 'ms');
+  root.setProperty('--flip', Math.round(600 / speed) + 'ms');
+  root.setProperty('--hp', Math.round(900 / speed) + 'ms');
+}
+function wait(ms, tk) {
+  return new Promise(res => {
+    let el = 0, last = performance.now();
+    const f = now => {
+      if (tk !== token) return res(false);
+      if (!paused) el += (now - last) * speed;
+      last = now;
+      if (el >= ms) return res(true);
+      requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f);
+  });
+}
+function thinkOrder(R) { return [...R.alive].sort((a, b) => ((a * 7 + R.r * 3) % 11) - ((b * 7 + R.r * 3) % 11) || a - b); }
+
+async function playRound(idx, tk) {
+  const R = rounds[idx];
+  cur = idx;
+  setRoundUI(idx);
+  clearBotState();
+  $('end').hidden = true;
+  if (mode !== 'circle') layoutCircle();
+  // 1. Berpikir
+  setPhase('think', 'Bot sedang berpikir…');
+  R.alive.forEach(i => { const el = players[i].el; el.classList.add('thinking'); el.querySelector('.card-front').innerHTML = ICON[R.choices[i]]; });
+  if (!await wait(450, tk)) return false;
+  const order = thinkOrder(R), per = Math.max(110, 1300 / order.length);
+  for (const i of order) {
+    if (!await wait(per, tk)) return false;
+    players[i].el.classList.remove('thinking');
+    players[i].el.classList.add('decided', 'carded');
+  }
+  if (!await wait(350, tk)) return false;
+  // 2. Pilih (reveal)
+  setPhase('reveal', 'Buka kartu!');
+  R.alive.forEach(i => players[i].el.classList.remove('decided'));
+  for (const i of R.alive) { players[i].el.classList.add('revealed'); if (!await wait(45, tk)) return false; }
+  if (!await wait(1100, tk)) return false;
+  // 3. Kumpul
+  setPhase('gather', '');
+  renderBoxes(R, false);
+  setArrows(null, false);
+  layoutBoxes(R);
+  if (!await wait(950, tk)) return false;
+  setArrows(R, false);
+  if (!await wait(650, tk)) return false;
+  // 4. Bagi poin
+  setPhase('resolve', '');
+  renderLedger(R);
+  setArrows(R, true);
+  renderBoxes(R, true);
+  if (R.pairs.length) {
+    particles(R, Math.round(800 / speed));
+    if (!await wait(650, tk)) return false;
+    R.alive.forEach(i => { const p = players[i]; if (R.delta[i]) pop(p, R.delta[i]); setHp(p, R.after[i], true); });
+  } else {
+    R.alive.forEach(i => setHp(players[i], R.after[i], true));
+  }
+  renderBoard(); renderChart(idx + 1); updateHud();
+  if (!await wait(R.pairs.length ? 1700 : 900, tk)) return false;
+  if (R.elim.length) {
+    R.elim.forEach(i => setOut(players[i], true));
+    if (!await wait(600, tk)) return false;
+  }
+  // 5. Kembali ke lingkaran
+  clearBotState();
+  layoutCircle();
+  setPhase('', 'Ronde berikutnya…');
+  if (!await wait(800, tk)) return false;
+  return true;
+}
+
+async function playFrom(idx) {
+  const tk = ++token;
+  running = true;
+  for (let i = idx; i < rounds.length; i++) {
+    const ok = await playRound(i, tk);
+    if (!ok) { if (tk === token) running = false; return; }
+  }
+  if (tk !== token) return;
+  running = false;
+  cur = rounds.length;
+  showEnd();
+}
+
+function jumpTo(idx, silent) {
+  token++; running = false;
+  idx = Math.max(0, Math.min(idx, rounds.length));
+  cur = idx;
+  stage.classList.add('no-anim');
+  clearBotState();
+  const hp = idx === 0 ? players.map(() => cfg.hp) : rounds[idx - 1].after;
+  players.forEach(p => { setHp(p, hp[p.id], false); setOut(p, hp[p.id] <= 0); });
+  layoutCircle();
+  setArrows(null, false);
+  setRoundUI(Math.min(idx, rounds.length - 1));
+  if (idx >= rounds.length) { $('cNum').textContent = rounds.length ? rounds.at(-1).r : 0; }
+  setPhase('', idx >= rounds.length ? 'Match selesai' : (idx === 0 ? 'Bersiap…' : 'Siap'));
+  if (idx > 0) renderLedger(rounds[idx - 1]); else resetLedger();
+  renderBoard(); renderChart(idx); updateHud();
+  $('end').hidden = true;
+  void stage.offsetWidth;
+  stage.classList.remove('no-anim');
+  if (idx >= rounds.length) { showEnd(); return; }
+  if (!silent && !paused) playFrom(idx);
+}
+
+function showEnd() {
+  setPhase('', 'Match selesai');
+  const last = rounds.at(-1);
+  const fin = last ? last.after : players.map(() => cfg.hp);
+  const order = rankOrder(fin);
+  const alive = order.filter(i => fin[i] > 0);
+  const top = fin[order[0]];
+  const tied = order.filter(i => fin[i] === top);
+  let title, why;
+  if (alive.length === 1) { title = `${players[alive[0]].name} juara!`; why = `Bertahan sendirian setelah ${last.r} ronde. Semua lawan kehabisan HP.`; }
+  else if (tied.length > 1) { title = 'Seri!'; why = `Batas ${cfg.maxRounds} ronde tercapai dan ${tied.map(i => players[i].name).join(' & ')} sama-sama punya ${top} HP.`; }
+  else { title = `${players[order[0]].name} juara!`; why = `Batas ${last ? last.r : cfg.maxRounds} ronde tercapai. HP terbanyak yang menang.`; }
+  const podSlot = (rank, id) => id == null ? '' : `<div class="pod p${rank}" style="--c:${players[id].color}"><div class="av robotwrap">${ROBOT}</div><div class="nm">${players[id].name}</div><div class="hp">${fin[id]} HP</div><div class="blk">${rank}</div></div>`;
+  $('end').innerHTML = `<div class="end-card"><h2>${title}</h2><p>${why}</p>
+    <div class="podium">${podSlot(2, order[1])}${podSlot(1, order[0])}${podSlot(3, order[2])}</div>
+    <div class="end-actions"><button class="btn primary" type="button" id="bAgain">Tonton lagi</button><button class="btn" type="button" id="bClose">Tutup</button></div></div>`;
+  $('end').hidden = false;
+  $('bAgain').onclick = () => { paused = false; renderPlay(); jumpTo(0); };
+  $('bClose').onclick = () => { $('end').hidden = true; };
+  renderPlay();
+}
+
+// ---------- Kontrol ----------
+const PLAY_SVG = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2v12l10-6z"/></svg>';
+const PAUSE_SVG = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2h4v12H3zM9 2h4v12H9z"/></svg>';
+function renderPlay() {
+  const finished = cur >= rounds.length && !running;
+  $('bPlay').innerHTML = finished ? `${PLAY_SVG}Ulang` : paused ? `${PLAY_SVG}Putar` : `${PAUSE_SVG}Jeda`;
+}
+$('bPlay').onclick = () => {
+  if (cur >= rounds.length && !running) { paused = false; renderPlay(); jumpTo(0); return; }
+  paused = !paused;
+  if (!paused && !running) playFrom(cur);
+  renderPlay();
+};
+$('bPrev').onclick = () => jumpTo(Math.max(0, (running ? cur : cur) - 1));
+$('bNext').onclick = () => jumpTo(cur + 1);
+$('bEnd').onclick = () => jumpTo(rounds.length);
+$('scrub').oninput = e => { const v = +e.target.value; $('scrubOut').textContent = 'R' + (rounds[v - 1] ? rounds[v - 1].r : v); };
+$('scrub').onchange = e => jumpTo(+e.target.value - 1);
+for (const b of $('speed').children) b.onclick = () => {
+  speed = +b.dataset.s; applySpeed();
+  for (const x of $('speed').children) x.setAttribute('aria-pressed', String(x === b));
+};
+$('scen').innerHTML = Object.entries(SCENARIOS).map(([k, s]) => `<button type="button" data-k="${k}" aria-pressed="${k === scenario}">${s.label}</button>`).join('');
+for (const b of $('scen').children) b.onclick = () => {
+  scenario = b.dataset.k;
+  for (const x of $('scen').children) x.setAttribute('aria-pressed', String(x === b));
+  paused = false; setup(); renderPlay(); playFrom(0);
+};
+const clampInt = (v, lo, hi, d) => { v = Math.round(+v); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
+$('bApply').onclick = () => {
+  cfg = {
+    hp: clampInt($('fHp').value, 100, 100000, 1000),
+    loss: 0, maxRounds: clampInt($('fMax').value, 1, 500, 100), memory: clampInt($('fMem').value, 1, 50, 10),
+  };
+  cfg.loss = clampInt($('fLoss').value, 1, cfg.hp, 100);
+  $('fHp').value = cfg.hp; $('fLoss').value = cfg.loss; $('fMax').value = cfg.maxRounds; $('fMem').value = cfg.memory;
+  paused = false; setup(); renderPlay(); playFrom(0);
+};
+$('fBrain').onchange = e => { showBrain = e.target.checked; try { localStorage.setItem('sba-brain', showBrain ? '1' : '0'); } catch (err) {} renderBoard(); };
+
+new ResizeObserver(() => {
+  stage.classList.add('no-anim');
+  measure();
+  if (mode === 'boxes' && rounds[cur]) layoutBoxes(rounds[cur]); else layoutCircle();
+  void stage.offsetWidth;
+  stage.classList.remove('no-anim');
+}).observe(stage);
+
+applySpeed();
+setup();
+renderPlay();
+playFrom(0);
+})();
+</script>
