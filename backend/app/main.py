@@ -110,7 +110,8 @@ def debug_round(body: DebugIn, max_steps: int) -> dict[str, Any]:
             "info": {"ronde": body.ronde, "hp": view.hp, "riwayat": len(history), "kabut": s.event == "kabut"}}
 
 
-def create_app(cfg: Config = default_config, trading: "TradingService | None" = None) -> FastAPI:
+def create_app(cfg: Config = default_config, trading: "TradingService | None" = None, backtest=None) -> FastAPI:
+    from .backtest.api import mount as mount_backtest
     from .games.api import mount as mount_arena
     from .trading.api import create_trading, mount as mount_trading
 
@@ -137,6 +138,7 @@ def create_app(cfg: Config = default_config, trading: "TradingService | None" = 
         yield
         task.cancel()
         runner.shutdown()
+        bt_jobs.shutdown()
 
     app = FastAPI(title="Suit Bot Arena", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.manager = manager
@@ -273,6 +275,7 @@ def create_app(cfg: Config = default_config, trading: "TradingService | None" = 
                 await manager.disconnect(room, player, send)
 
     mount_trading(app, trading)
+    bt_jobs = mount_backtest(app, backtest)
     arena = mount_arena(app, pool=runner.executor, db=trading.db)
 
     # ------------------------------------------------------------ frontend

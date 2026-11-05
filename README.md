@@ -71,6 +71,11 @@ Kamu dilempar ke satu titik di masa lalu. Candle berikutnya belum terlihat: putu
   cross/isolated (margin bisa ditambah/dikurangi), likuidasi dengan harga likuidasi di chart, funding tiap 8 jam
   (data funding asli Binance kalau diunduh), fee maker 0,02% / taker 0,05%, order limit/market/stop/stop-limit,
   reduce-only, post-only, TP/SL posisi.
+- **Backtest strategi sendiri (tab Backtest).** Tulis strategi sebagai file Python di folder `strategi/`
+  (pandas penuh + indikator siap pakai), uji di data historis dengan fee/funding/bunga yang sama dengan game,
+  per aset atau sebagai portofolio. Hasil: CAGR, drawdown, Sharpe/Sortino, win rate, return bulanan, kurva ekuitas
+  vs beli-tahan, chart candle dengan penanda transaksi, riwayat. Bisa memakai data `anything/pengumpul-data`
+  (VIX, forex, komoditas, asing/broker IDX) tanpa kebocoran data masa depan. Panduan: [`strategi/README.md`](strategi/README.md).
 - **Margin + short saham.**
   - US (Reg T): daya beli 2×, maintenance 25%/30%, komisi per lembar + SEC fee + FINRA TAF, bunga margin & biaya pinjam saham harian.
   - IDX (BEI): short hanya Daftar Efek Short Selling (ASII, BBCA, BRPT, BUMI, INDF sejak 1 Okt 2026), jaminan awal
@@ -171,6 +176,9 @@ Tes backend Kilas Pasar mencakup:
 - agregasi timeframe dan zona waktu bursa
 - parser arsip Binance (termasuk timestamp mikrodetik 2025)
 - eksekusi order (fee, slippage, gap, urutan SL/TP di dalam candle, OCO, lot IDX)
+- backtest: broker portofolio sama dengan mesin game (harga likuidasi, isolated, cross multi-aset), funding & bunga,
+  rebalance jual-dulu, tidak ada data masa depan di `langkah`, deteksi `shift(-1)`, waktu terbit data pengumpul,
+  semua contoh strategi berjalan, API (subprocess, progres, hasil, hapus)
 - futures & margin: harga likuidasi = maintenance, likuidasi cross/isolated, funding, fee maker/taker, stop-limit,
   tier leverage, aturan short BEI (daftar efek, uptick, jaminan Rp50 juta, 120%/135%), Reg T (komisi, SEC/TAF, bunga)
 - **tidak ada candle masa depan yang bocor** untuk setiap timeframe
@@ -196,6 +204,12 @@ backend/app/
     engine.py                akun spot: order, eksekusi per candle, fee, statistik
     products.py              aturan & fee futures/margin per pasar (Binance, Reg T, BEI)
     derivatives.py           akun futures/margin: long/short, leverage, likuidasi, funding, bunga
+  backtest/
+    broker.py                broker portofolio (banyak aset, satu modal) dengan aturan & fee yang sama
+    strategy.py, runner.py   format file strategi, konteks bt, simulasi, cek kebocoran data masa depan
+    data.py, ta.py           candle + data pengumpul-data (aman waktu terbit), indikator
+    metrics.py, api.py       statistik, REST /api/backtest (jalan di proses terpisah), CLI python -m app.backtest
+strategi/                    file strategi backtest (contoh_*.py, _template.py, README.md)
     service.py, api.py       solo, harian, balapan, REST & WebSocket /ws/pasar
     accounts.py              akun & papan peringkat (SQLite)
 frontend/src/

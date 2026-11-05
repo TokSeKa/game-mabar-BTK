@@ -18,12 +18,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     STATIC_DIR=/app/static \
     GUIDE_PATH=/app/docs/PANDUAN_BOT_LLM.md \
-    DATA_DIR=/data
+    DATA_DIR=/data \
+    STRATEGI_DIR=/app/strategi \
+    PENGUMPUL_DIR=/pengumpul
 WORKDIR /app
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
 COPY docs ./docs
+COPY strategi ./strategi
 COPY --from=web /web/dist ./static
 # /data: data pasar Kilas Pasar + database akun (dipasang sebagai volume)
 RUN useradd --create-home --uid 10001 suitbot && mkdir -p /data && chown suitbot:suitbot /data

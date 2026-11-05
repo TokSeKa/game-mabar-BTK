@@ -77,6 +77,16 @@ Kilas Pasar butuh data candle pasar. Unduh sekali, lalu update kapan saja:
 
 Pengunduhan bisa dijalankan saat game sedang menyala. Setelah selesai, cukup muat ulang halaman Kilas Pasar. Unduhan yang terputus (Ctrl+C, internet mati) bisa diulang dan akan melanjutkan dari bagian yang belum ada.
 
+### Backtest strategi sendiri
+
+Tab **Kilas Pasar → Backtest** menjalankan file strategi di folder `strategi/` (lihat `strategi/README.md`).
+Folder itu dipasang langsung ke container, jadi file yang kamu edit di VS Code langsung terbaca: cukup muat ulang
+halaman. Data tambahan dari repo `anything` (folder `../anything/pengumpul-data/data`) juga dipasang otomatis kalau ada;
+lokasi lain bisa diatur dengan `PENGUMPUL_DATA=...` di `.env`. Dari terminal: `scripts\backtest.bat`.
+
+Kalau game dibuka teman lewat link publik, mereka bisa menjalankan strategi yang ada tapi tidak bisa mengunggah kode.
+Matikan sama sekali dengan `BACKTEST_AKTIF=0` di `.env`.
+
 Data tersimpan di volume Docker `pasar-data`, jadi tidak hilang walaupun container dimatikan atau di-build ulang. Kalau memakai preset penuh, cek batas disk Docker Desktop di **Settings → Resources → Advanced → Disk image size**.
 
 Untuk saham, Yahoo hanya menyediakan data 5–30 menit untuk ±60 hari terakhir, dan 1 menit untuk ±30 hari. Jalankan **Update** rutin (misalnya seminggu sekali) supaya riwayat intraday saham makin panjang.

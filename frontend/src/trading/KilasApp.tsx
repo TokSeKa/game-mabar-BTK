@@ -1,11 +1,12 @@
 import './trading.css';
 import { useUser, Akun, Riwayat } from './Akun';
+import { Backtest } from './Backtest';
 import { Daily } from './Daily';
 import { PanduanPasar } from './Panduan';
 import { Race } from './Race';
 import { Solo } from './Solo';
 
-export type KilasTab = 'main' | 'harian' | 'balapan' | 'riwayat' | 'akun' | 'panduan';
+export type KilasTab = 'main' | 'harian' | 'balapan' | 'backtest' | 'riwayat' | 'akun' | 'panduan';
 
 interface Props {
   tab: KilasTab;
@@ -18,6 +19,7 @@ const TABS: { id: KilasTab; label: string }[] = [
   { id: 'main', label: 'Main sendiri' },
   { id: 'harian', label: 'Tantangan harian' },
   { id: 'balapan', label: 'Balapan' },
+  { id: 'backtest', label: 'Backtest' },
   { id: 'riwayat', label: 'Riwayat' },
   { id: 'panduan', label: 'Cara main' },
 ];
@@ -37,6 +39,7 @@ export default function KilasApp({ tab, setTab, toast, raceCode }: Props) {
       {tab === 'main' && <Solo toast={toast} />}
       {tab === 'harian' && <Daily toast={toast} goAccount={() => setTab('akun')} />}
       {tab === 'balapan' && <Race toast={toast} initialCode={raceCode} />}
+      {tab === 'backtest' && <Backtest toast={toast} />}
       {tab === 'riwayat' && <Riwayat goAccount={() => setTab('akun')} />}
       {tab === 'akun' && <Akun toast={toast} />}
       {tab === 'panduan' && <PanduanPasar />}

@@ -3,3 +3,6 @@ uvicorn[standard]==0.32.1
 numpy==2.3.5
 # hanya untuk mengunduh data saham (IDX & US)
 yfinance==1.8.0
+# backtest: strategi memakai pandas, data pengumpul-data berformat Parquet
+pandas==3.0.5
+pyarrow==26.0.1

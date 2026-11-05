@@ -14,9 +14,17 @@ services:
       ROOM_IDLE_SECONDS: ${ROOM_IDLE_SECONDS:-1800}
       PRACTICE_CONCURRENCY: ${PRACTICE_CONCURRENCY:-4}
       DATA_DIR: /data
+      STRATEGI_DIR: /app/strategi
+      PENGUMPUL_DIR: /pengumpul
+      BACKTEST_AKTIF: ${BACKTEST_AKTIF:-1}
+      BACKTEST_TIMEOUT: ${BACKTEST_TIMEOUT:-900}
     volumes:
-      # data pasar (candle) + database akun Kilas Pasar
+      # data pasar (candle) + database akun Kilas Pasar + hasil backtest
       - ${PASAR_DATA:-pasar-data}:/data
+      # file strategi backtest: diedit di laptop, langsung terbaca tanpa build ulang
+      - ./strategi:/app/strategi:ro
+      # data tambahan dari repo anything/pengumpul-data (VIX, forex, asing/broker IDX, tick); boleh kosong
+      - ${PENGUMPUL_DATA:-../anything/pengumpul-data/data}:/pengumpul:ro
     mem_limit: ${MEM_LIMIT:-1g}
     cpus: ${CPUS:-1.0}
     logging:

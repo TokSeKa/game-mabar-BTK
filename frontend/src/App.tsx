@@ -22,7 +22,7 @@ type View =
   | { name: 'mabar'; route: MabarRoute };
 
 const DEFAULT_BOT: SavedBot = { mode: 'blocks', code: '', blocks: null };
-const PASAR_TABS: KilasTab[] = ['main', 'harian', 'balapan', 'riwayat', 'akun', 'panduan'];
+const PASAR_TABS: KilasTab[] = ['main', 'harian', 'balapan', 'backtest', 'riwayat', 'akun', 'panduan'];
 
 function mabarFromHash(h: string): MabarRoute | null {
   if (h === '#main') return { page: 'home' };

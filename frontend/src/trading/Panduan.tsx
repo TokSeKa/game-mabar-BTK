@@ -51,6 +51,12 @@ export function PanduanPasar() {
         <li><b>IDX (BEI)</b>: short hanya untuk Daftar Efek Short Selling, jaminan awal minimal Rp50 juta, margin call di rasio jaminan 135%, forced buy di 120%. Buka short wajib order limit di harga ≥ harga terakhir (uptick). Margin long 2×, forced sell saat ekuitas 20% dari nilai posisi. Bunga 18%/tahun dihitung harian.</li>
         <li>Bunga dan biaya pinjam dipotong tiap pergantian hari kalender (termasuk akhir pekan). Kas negatif = dana pinjaman dari broker.</li>
       </ul>
+      <h3>Backtest strategi sendiri</h3>
+      <p>
+        Tab <b>Backtest</b> menguji strategi yang kamu tulis sebagai file Python di folder <code>strategi/</code> pada data historis
+        semua aset (per aset atau sebagai portofolio), dengan fee, funding, bunga, dan aturan short yang sama seperti di atas.
+        Keputusan dibuat saat candle ditutup dan dieksekusi di candle berikutnya. Panduan lengkap ada di <code>strategi/README.md</code>.
+      </p>
       <h3>Bagaimana order dieksekusi</h3>
       <p>
         Order diperiksa pada candle <b>dasar</b> (timeframe terkecil yang tersedia untuk sesi itu, misalnya 1 menit untuk kripto) walaupun chart yang

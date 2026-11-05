@@ -270,3 +270,6 @@ Produk: **Spot** (semua pasar), **Futures perpetual** (kripto; long/short, lever
 dan **Margin + short** (saham US dengan aturan Reg T, saham IDX dengan aturan short selling BEI). "Aturan bebas" membuka short
 dan futures untuk semua saham. Penjelasan lengkap (jenis order, cara eksekusi, fee, likuidasi, funding, bunga, mode buta, data)
 ada di halaman **Cara main** di dalam Kilas Pasar.
+
+Tab **Backtest**: uji strategi trading buatanmu sendiri (file Python di folder `strategi/`) di data historis
+semua aset, per aset atau sebagai portofolio, dengan fee dan aturan yang sama. Panduan lengkap: `strategi/README.md`.
