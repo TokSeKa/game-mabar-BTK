@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AccountSnap, SessionInfo } from './api';
+import { DerivPanel } from './DerivPanel';
 import { fmtMoney, fmtNum, fmtPct, fmtQty } from './format';
 
 interface Props {
@@ -13,7 +14,12 @@ interface Props {
 type Side = 'buy' | 'sell';
 type Kind = 'market' | 'limit' | 'stop';
 
-export function TradePanel({ session, account, price, send, disabled }: Props) {
+export function TradePanel(props: Props) {
+  if (props.session.product) return <DerivPanel {...props} />;
+  return <SpotPanel {...props} />;
+}
+
+function SpotPanel({ session, account, price, send, disabled }: Props) {
   const [side, setSide] = useState<Side>('buy');
   const [kind, setKind] = useState<Kind>('market');
   const [qty, setQty] = useState('');

@@ -176,3 +176,84 @@ def ingest_symbol(root: Path, symbol: str, since: str | None, log: Log, workers:
     update_catalog_asset(root, "crypto", symbol, native={"1m"})
     log(f"  {symbol}: {len(merged):,} candle 1m tersimpan" + (f" ({failed} file gagal)" if failed else ""))
     return True
+
+
+# ---------------------------------------------------------------- funding rate futures (opsional)
+FUND_REC = np.dtype([("t", "<i8"), ("r", "<f8")])
+
+
+def funding_path(root: Path, symbol: str) -> Path:
+    return root / "series" / "crypto" / symbol / "funding.npy"
+
+
+def read_funding(path: Path) -> np.ndarray:
+    try:
+        arr = np.load(path, allow_pickle=False)
+    except (OSError, ValueError):
+        return np.empty(0, FUND_REC)
+    return arr.astype(FUND_REC, copy=False) if arr.dtype.names == FUND_REC.names else np.empty(0, FUND_REC)
+
+
+def parse_funding_zip(path: Path) -> np.ndarray:
+    """CSV funding Binance: ``calc_time, funding_interval_hours, last_funding_rate`` (header bisa ada/tidak)."""
+    with zipfile.ZipFile(path) as zf:
+        name = next(n for n in zf.namelist() if n.endswith(".csv"))
+        lines = zf.read(name).decode("utf-8", "replace").splitlines()
+    header: list[str] | None = None
+    rows: list[list[str]] = []
+    for ln in lines:
+        parts = [x.strip() for x in ln.split(",")]
+        if not parts or not parts[0]:
+            continue
+        if not parts[0][:1].isdigit():
+            header = [h.lower() for h in parts]
+            continue
+        rows.append(parts)
+    if not rows:
+        return np.empty(0, FUND_REC)
+    ti, ri = 0, len(rows[0]) - 1
+    if header:
+        ti = next((header.index(k) for k in ("calc_time", "fundingtime", "funding_time") if k in header), ti)
+        ri = next((header.index(k) for k in ("last_funding_rate", "fundingrate", "funding_rate") if k in header), ri)
+    out = np.empty(len(rows), FUND_REC)
+    n = 0
+    for r in rows:
+        try:
+            t = int(float(r[ti]))
+            out[n] = (t // 1000 if t > 10**14 else t, float(r[ri]))
+            n += 1
+        except (ValueError, IndexError):
+            continue
+    return out[:n]
+
+
+def ingest_funding(root: Path, symbol: str, log: Log, workers: int = 8) -> int:
+    """Unduh riwayat funding rate perpetual USDⓈ-M (dipakai mode Futures). Gagal = pakai 0,01%/8 jam."""
+    path = funding_path(root, symbol)
+    existing = read_funding(path)
+    keys = [k for k in list_keys(f"data/futures/um/monthly/fundingRate/{symbol}/") if k.endswith(".zip")]
+    if not keys:
+        return 0
+    if len(existing):
+        last = datetime.fromtimestamp(int(existing["t"][-1]) / 1000, timezone.utc).strftime("%Y-%m")
+        keys = [k for k in keys if (m := _MONTH.search(k)) and f"{m.group(1)}-{m.group(2)}" >= last]
+    raw_dir = root / "raw" / "binance-funding" / symbol
+    parts = [existing]
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = [ex.submit(download_zip, k, raw_dir / Path(k).name) for k in keys]
+        for f in as_completed(futs):
+            try:
+                parts.append(parse_funding_zip(f.result()))
+            except Exception:  # noqa: BLE001
+                continue
+    merged = np.concatenate(parts)
+    if len(merged) == 0:
+        return 0
+    merged = merged[np.argsort(merged["t"], kind="stable")]
+    keep = np.concatenate([[True], np.diff(merged["t"]) > 0])
+    merged = merged[keep]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name("funding.tmp.npy")
+    np.save(tmp, merged, allow_pickle=False)
+    tmp.replace(path)
+    return int(len(merged))

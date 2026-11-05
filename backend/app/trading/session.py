@@ -211,6 +211,26 @@ class MarketView:
         self.cursor = self.next_cursor(tf, n)
         return old, self.cursor
 
+    def funding_schedule(self, rate: float, hours: int):
+        """Jadwal funding dalam waktu tampilan: data asli Binance kalau ada, selain itu ``rate`` tiap ``hours`` jam."""
+        from .derivatives import default_schedule
+
+        dflt = default_schedule(rate, hours)
+        arr = self.store.funding(self.key) if self.market == "crypto" else None
+        if arr is None or len(arr) == 0:
+            return dflt
+        disp = (np.asarray(arr["t"], dtype=np.int64) + self.shift) // 1000
+        rates = np.asarray(arr["r"], dtype=np.float64)
+        lo, hi, gap = int(disp[0]), int(disp[-1]), hours * 3600
+
+        def sched(t0: int, t1: int):
+            a, b = int(np.searchsorted(disp, t0, side="right")), int(np.searchsorted(disp, t1, side="right"))
+            out = list(zip(disp[a:b].tolist(), rates[a:b].tolist()))
+            out += [(ts, r) for ts, r in dflt(t0, t1) if ts < lo - gap or ts > hi + gap]
+            out.sort()
+            return out
+        return sched
+
     def slice_for_engine(self, a: int, b: int) -> tuple[np.ndarray, ...]:
         rows = np.asarray(self.base[a:b])
         k = self.k

@@ -21,7 +21,7 @@ export function Race({ toast, initialCode = '' }: Props) {
   const [kat, setKat] = useState<Katalog | null>(null);
   const [name, setName] = useState(() => getUser()?.username ?? load<string>('sba-name', ''));
   const [code, setCode] = useState(initialCode);
-  const [cfg, setCfg] = useState({ pasar: '', tf: '15m', langkah: 120, kecepatan: 2, buta: true, modal: 0 });
+  const [cfg, setCfg] = useState({ pasar: '', tf: '15m', langkah: 120, kecepatan: 2, buta: true, modal: 0, produk: 'spot', aturan: 'nyata' });
   const [state, setState] = useState<any>(null);
   const [board, setBoard] = useState<BoardRow[]>([]);
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -113,7 +113,7 @@ export function Race({ toast, initialCode = '' }: Props) {
             <button className="btn small danger" type="button" onClick={leave}>Keluar</button>
           </div>
           <p>
-            Pasar <b>{state.pasar}</b> · timeframe <b>{state.tf_label}</b> · {state.steps_total} candle · 1 candle tiap {state.speed} detik.
+            Pasar <b>{state.pasar}</b> · {state.produk === 'futures' ? <b>Futures</b> : state.produk === 'margin' ? <b>Margin + short</b> : 'Spot'}{state.aturan === 'bebas' ? ' (aturan bebas)' : ''} · timeframe <b>{state.tf_label}</b> · {state.steps_total} candle · 1 candle tiap {state.speed} detik.
             Semua pemain melihat chart yang sama (aset rahasia) dan trading dengan modal masing-masing. Return tertinggi menang.
           </p>
           <ul className="players">
@@ -151,6 +151,20 @@ export function Race({ toast, initialCode = '' }: Props) {
             {markets.map((m) => <option key={m.id} value={m.id}>{m.nama}</option>)}
           </select>
         </label>
+        <label className="field" htmlFor="r-prod">
+          Produk
+          <select id="r-prod" value={cfg.produk} onChange={(e) => setCfg({ ...cfg, produk: e.target.value })}>
+            <option value="spot">Spot</option>
+            <option value="futures">Futures (long/short + leverage)</option>
+            <option value="margin">Margin + short (saham)</option>
+          </select>
+        </label>
+        {cfg.produk !== 'spot' && (
+          <>
+            <label className="toggle" htmlFor="r-at"><input id="r-at" type="checkbox" checked={cfg.aturan === 'bebas'} onChange={(e) => setCfg({ ...cfg, aturan: e.target.checked ? 'bebas' : 'nyata' })} /> Aturan bebas (futures/short di semua saham)</label>
+            <p className="hint">{cfg.produk === 'futures' ? 'Aturan asli: futures hanya kripto. Pasar acak akan memilih pasar yang mendukung.' : 'Margin hanya untuk saham. Di BEI short cuma untuk 5 saham daftar BEI kecuali aturan bebas.'}</p>
+          </>
+        )}
         <div className="fields">
           <label className="field" htmlFor="r-tf">Timeframe<select id="r-tf" value={cfg.tf} onChange={(e) => setCfg({ ...cfg, tf: e.target.value })}>{tfs.map((t) => <option key={t} value={t}>{kat?.tf_label[t] ?? t}</option>)}</select></label>
           <label className="field" htmlFor="r-n">Jumlah candle<input id="r-n" type="number" min={20} max={1000} value={cfg.langkah} onChange={(e) => setCfg({ ...cfg, langkah: Number(e.target.value) })} /></label>

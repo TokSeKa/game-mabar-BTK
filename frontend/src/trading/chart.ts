@@ -293,25 +293,38 @@ export class TradingChart {
       const t = at(f.time);
       if (t == null) continue;
       const buy = f.side === 'buy';
+      const liq = f.label === 'Likuidasi' || f.label.startsWith('Forced');
       ms.push({
-        time: T(t), position: buy ? 'belowBar' : 'aboveBar', shape: buy ? 'arrowUp' : 'arrowDown',
-        color: buy ? C.up : f.label === 'TP' ? C.blue : C.down, text: buy ? 'B' : f.label === 'SL' || f.label === 'TP' ? f.label : 'J',
+        time: T(t), position: buy ? 'belowBar' : 'aboveBar', shape: liq ? 'circle' : buy ? 'arrowUp' : 'arrowDown',
+        color: liq ? C.orange : buy ? C.up : f.label === 'TP' ? C.blue : C.down,
+        text: liq ? 'LIQ' : f.label === 'SL' || f.label === 'TP' ? f.label : buy ? 'B' : 'J',
       });
     }
     ms.sort((a, b) => (a.time as number) - (b.time as number));
     this.markers.setMarkers(ms);
   }
 
-  setOrderLines(orders: Order[], avgCost: number, holding: boolean): void {
+  setOrderLines(orders: Order[], avgCost: number, holding: boolean, pos?: { side: 'long' | 'short' | null; liq: number | null; call: number | null }): void {
     for (const l of this.lines) this.candle.removePriceLine(l);
     this.lines = [];
     for (const o of orders) {
-      const color = o.side === 'buy' ? C.up : o.label === 'TP' ? C.blue : C.down;
-      const title = o.side === 'buy' ? (o.kind === 'limit' ? 'Limit beli' : 'Stop beli') : o.label === 'TP' ? 'TP' : o.label === 'SL' ? 'SL' : o.kind === 'limit' ? 'Limit jual' : 'Stop jual';
+      const color = o.label === 'TP' ? C.blue : o.label === 'SL' ? C.down : o.side === 'buy' ? C.up : C.down;
+      const sisi = o.side === 'buy' ? 'beli' : 'jual';
+      const title = o.label === 'TP' || o.label === 'SL' ? o.label : o.label === 'Tutup' ? 'Tutup' : o.kind === 'stop' ? `Stop ${sisi}` : o.kind === 'stop_limit' && !o.triggered ? `Limit ${sisi}` : `Limit ${sisi}`;
       this.lines.push(this.candle.createPriceLine({ price: o.price, color, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title }));
+      if (o.kind === 'stop_limit' && !o.triggered && o.stop) {
+        this.lines.push(this.candle.createPriceLine({ price: o.stop, color, lineWidth: 1, lineStyle: LineStyle.SparseDotted, axisLabelVisible: true, title: `Picu ${sisi}` }));
+      }
     }
     if (holding && avgCost > 0) {
-      this.lines.push(this.candle.createPriceLine({ price: avgCost, color: C.gold, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Rata-rata' }));
+      const title = pos?.side === 'long' ? 'Entry long' : pos?.side === 'short' ? 'Entry short' : 'Rata-rata';
+      this.lines.push(this.candle.createPriceLine({ price: avgCost, color: C.gold, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title }));
+    }
+    if (pos?.liq && pos.liq > 0) {
+      this.lines.push(this.candle.createPriceLine({ price: pos.liq, color: C.orange, lineWidth: 2, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: 'Likuidasi' }));
+    }
+    if (pos?.call && pos.call > 0) {
+      this.lines.push(this.candle.createPriceLine({ price: pos.call, color: C.pink, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: 'Margin call' }));
     }
   }
 

@@ -12,6 +12,8 @@ const TF_SEC: Record<string, number> = {
 export const tfSec = (tf: string) => TF_SEC[tf] ?? 60;
 const INTRADAY = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h']);
 
+const posOf = (a: AccountSnap) => ({ side: a.side ?? null, liq: a.liq_price ?? null, call: a.call_price ?? null });
+
 export interface PanelHandle {
   id: number;
   tf: string;
@@ -84,7 +86,7 @@ export function ChartPanel(p: Props) {
           if (older.length) chart.setData(older.concat(chart.data), older.length);
         }
         chart.setFills(fillsRef.current);
-        if (accRef.current) chart.setOrderLines(accRef.current.orders, accRef.current.avg_cost, accRef.current.qty > 0);
+        if (accRef.current) chart.setOrderLines(accRef.current.orders, accRef.current.avg_cost, accRef.current.qty !== 0, posOf(accRef.current));
         setLegend({ c: chart.data[chart.data.length - 1] ?? null, prev: chart.data[chart.data.length - 2] ?? null });
       },
       onUpdates: (u) => {
@@ -116,7 +118,7 @@ export function ChartPanel(p: Props) {
   }, [p.fills]);
   useEffect(() => {
     const a = p.account;
-    if (a) chartRef.current?.setOrderLines(a.orders, a.avg_cost, a.qty > 0);
+    if (a) chartRef.current?.setOrderLines(a.orders, a.avg_cost, a.qty !== 0, posOf(a));
   }, [p.account]);
   useEffect(() => {
     layerRef.current?.setTool(p.tool);

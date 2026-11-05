@@ -58,16 +58,22 @@ Selama Docker Desktop menyala, game dan tunnel tetap berjalan meski terminal dit
 Kilas Pasar butuh data candle pasar. Unduh sekali, lalu update kapan saja:
 
 - **Windows:** klik dua kali `scripts\unduh-data.bat`, lalu pilih:
-  - **1 Cepat**: ±5 menit. Berisi 5 kripto (1 menit sejak 2024-07), 30 saham IDX, dan 20 saham US.
-  - **2 Penuh**: beberapa jam dan puluhan GB. Berisi ±65 kripto (1 menit sejak 2017), ±140 saham IDX, dan ±90 saham US.
-  - **3 Update**: menambahkan data terbaru ke semua aset yang sudah ada.
+  - **1 Cepat**: ±5 menit. Berisi 30 saham IDX, 20 saham US, dan 5 kripto (1 menit sejak 2024-07).
+  - **2 Penuh**: beberapa jam dan puluhan GB. Berisi ±140 saham IDX, ±90 saham US, lalu ±65 kripto (1 menit sejak 2017).
+  - **3 Saham saja** / **4 Saham penuh**: hanya IDX + US, tanpa kripto. Pakai ini kalau sudah punya kripto tapi belum punya saham.
+  - **5 Update**: menambahkan data terbaru ke semua aset yang sudah ada.
+  - **6 Funding rate**: riwayat funding futures Binance untuk kripto yang sudah ada (dipakai mode Futures; tanpa ini dipakai 0,01% per 8 jam).
+
+  Saham selalu diunduh lebih dulu (cuma beberapa menit), baru kripto yang lama. Jadi kalau unduhan penuh dihentikan
+  di tengah jalan, saham sudah tersedia. **Update tidak menambah pasar baru**: kalau datamu baru kripto saja, pilih
+  "Saham saja" sekali, setelah itu Update akan ikut memperbarui saham.
 - **Mac / Linux:**
 
   ```bash
   ./scripts/unduh-data.sh cepat
   ```
 
-  Ganti `cepat` dengan `penuh`, `update`, `contoh`, atau `status` sesuai kebutuhan.
+  Ganti `cepat` dengan `penuh`, `saham`, `saham-penuh`, `update`, `funding`, `contoh`, atau `status` sesuai kebutuhan.
 
 Pengunduhan bisa dijalankan saat game sedang menyala. Setelah selesai, cukup muat ulang halaman Kilas Pasar. Unduhan yang terputus (Ctrl+C, internet mati) bisa diulang dan akan melanjutkan dari bagian yang belum ada.
 
@@ -111,7 +117,7 @@ Data Kilas Pasar tanpa Docker (disimpan di folder `data/` di dalam repo). Jalank
 .venv/bin/python -m app.trading.unduh semua --preset cepat
 ```
 
-Ganti `semua --preset cepat` dengan `semua --preset penuh`, `update`, `contoh`, atau `status`.
+Ganti `semua --preset cepat` dengan `semua --preset penuh`, `saham`, `update`, `funding`, `contoh`, atau `status`.
 
 ### Main dengan teman di Wi-Fi yang sama (tanpa internet/tunnel)
 

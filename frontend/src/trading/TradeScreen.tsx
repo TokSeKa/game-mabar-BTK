@@ -211,6 +211,7 @@ export function TradeScreen({ conn, session: initial, toast, onExit, onAgain, ra
         <div className="ts-title">
           <span className="badge">{MODE_LABEL[session.mode] ?? session.mode}</span>
           <h2>{session.label}</h2>
+          {session.product && <span className="badge alt">{session.product.kind === 'perp' ? 'Futures' : 'Margin'}</span>}
           <span className="hint">{session.market_nama} · data dasar {session.tf_label[session.base_tf] ?? session.base_tf} · {fmt.full(now)}</span>
         </div>
         <div className="ts-price">
@@ -302,7 +303,7 @@ export function TradeScreen({ conn, session: initial, toast, onExit, onAgain, ra
                 {recentFills.map((f) => (
                   <tr key={f.id}>
                     <td>{fmt.full(f.time)}</td>
-                    <td className={f.side === 'buy' ? 'up' : 'down'}>{f.side === 'buy' ? 'Beli' : 'Jual'}</td>
+                    <td className={f.side === 'buy' ? 'up' : 'down'}>{session.product?.kind === 'perp' ? (f.side === 'buy' ? 'Buy' : 'Sell') : f.side === 'buy' ? 'Beli' : 'Jual'}</td>
                     <td>{f.label}{f.note ? ` (${f.note})` : ''}</td>
                     <td>{fmtQty(f.qty / lot, lot > 1 ? 1 : session.qty_step)} {lot > 1 ? 'lot' : session.satuan}</td>
                     <td>{fmtNum(f.price, session.decimals)}</td>
@@ -357,12 +358,12 @@ function RaceBoard({ race }: { race: RaceInfo }) {
         {race.board.map((b, i) => (
           <li key={b.id} className={`${b.id === race.myId ? 'me' : ''} ${b.online ? '' : 'off'}`}>
             <span className="rk">{i + 1}</span>
-            <span className="nm">{b.name}{b.in_market ? ' ●' : ''}</span>
+            <span className="nm">{b.name}{b.in_market ? (b.side === 'short' ? ' ▼' : b.side === 'long' ? ' ▲' : ' ●') : ''}{b.n_liq ? ' 💥' : ''}</span>
             <b className={b.return_pct >= 0 ? 'up' : 'down'}>{fmtPct(b.return_pct)}</b>
           </li>
         ))}
       </ol>
-      <p className="hint">● = sedang memegang aset. Posisi dan order lawan tidak terlihat.</p>
+      <p className="hint">● / ▲ = sedang memegang aset (long), ▼ = short, 💥 = pernah terlikuidasi. Posisi dan order lawan tidak terlihat.</p>
     </div>
   );
 }

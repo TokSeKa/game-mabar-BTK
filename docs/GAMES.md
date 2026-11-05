@@ -264,5 +264,9 @@ Panduan bot Suit Bot Arena untuk AI: [docs/PANDUAN_BOT_LLM.md](PANDUAN_BOT_LLM.m
 ## Kilas Pasar
 
 Simulasi trading di chart pasar **asli** (kripto, saham IDX, saham US). Kamu dilempar ke satu titik di masa lalu, candle berikutnya belum terlihat,
-lalu memutuskan beli/jual sambil memajukan waktu. Mode: main sendiri, tantangan harian, dan balapan bareng teman. Penjelasan lengkap
-(jenis order, cara eksekusi, fee, mode buta, data) ada di halaman **Cara main** di dalam Kilas Pasar.
+lalu memutuskan beli/jual sambil memajukan waktu. Mode: main sendiri, tantangan harian, dan balapan bareng teman.
+
+Produk: **Spot** (semua pasar), **Futures perpetual** (kripto; long/short, leverage bertingkat, cross/isolated, funding, likuidasi),
+dan **Margin + short** (saham US dengan aturan Reg T, saham IDX dengan aturan short selling BEI). "Aturan bebas" membuka short
+dan futures untuk semua saham. Penjelasan lengkap (jenis order, cara eksekusi, fee, likuidasi, funding, bunga, mode buta, data)
+ada di halaman **Cara main** di dalam Kilas Pasar.

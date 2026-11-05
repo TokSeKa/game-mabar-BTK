@@ -14,8 +14,11 @@ from typing import Any, Awaitable, Callable
 import numpy as np
 
 from .accounts import AccountDB
+from .derivatives import DerivAccount
 from .engine import Account, TradeError
 from .markets import MARKETS
+from .products import catalog as product_catalog
+from .products import product_for, products
 from .session import Blind, MarketView, SessionError, build_view, eligible_assets
 from .store import CandleStore
 from .timeframes import LABEL
@@ -46,21 +49,56 @@ def _num(v: Any, lo: float, hi: float, default: float) -> float:
     return min(max(x, lo), hi)
 
 
-def make_account(view: MarketView, cfg: dict[str, Any]) -> Account:
+def rules_of(cfg: dict[str, Any]) -> str:
+    return "bebas" if str(cfg.get("aturan") or "") == "bebas" else "nyata"
+
+
+def make_account(view: MarketView, cfg: dict[str, Any]) -> Account | DerivAccount:
     spec = view.spec
-    return Account(
-        capital=_num(cfg.get("modal"), 1, 1e13, spec.capital),
-        fee_buy=_num(cfg.get("fee_beli"), 0, 0.05, spec.fee_buy),
-        fee_sell=_num(cfg.get("fee_jual"), 0, 0.05, spec.fee_sell),
-        slippage=_num(cfg.get("slippage"), 0, 0.02, spec.slippage),
-        qty_step=spec.qty_step if not (view.blind.harga and spec.qty_step < 1) else 1e-8,
-        min_notional=spec.min_notional,
+    capital = _num(cfg.get("modal"), 1, 1e13, spec.capital)
+    slippage = _num(cfg.get("slippage"), 0, 0.02, spec.slippage)
+    qty_step = spec.qty_step if not (view.blind.harga and spec.qty_step < 1) else 1e-8
+    pid = str(cfg.get("produk") or "spot")
+    if pid == "spot":
+        return Account(
+            capital=capital,
+            fee_buy=_num(cfg.get("fee_beli"), 0, 0.05, spec.fee_buy),
+            fee_sell=_num(cfg.get("fee_jual"), 0, 0.05, spec.fee_sell),
+            slippage=slippage, qty_step=qty_step, min_notional=spec.min_notional,
+        )
+    prod = product_for(view.market, pid, view.info["symbol"], rules_of(cfg))
+    if prod is None:
+        raise GameError(f"Produk itu tidak tersedia untuk {spec.nama}" + (" dengan aturan pasar asli." if rules_of(cfg) == "nyata" else "."))
+    if prod.kind == "perp":
+        fee_buy = fee_sell = _num(cfg.get("fee_taker"), 0, 0.05, prod.fee_buy)
+        maker = _num(cfg.get("fee_maker"), -0.001, 0.05, prod.maker or 0.0)
+    else:
+        fee_buy = _num(cfg.get("fee_beli"), 0, 0.05, prod.fee_buy)
+        fee_sell = _num(cfg.get("fee_jual"), 0, 0.05, prod.fee_sell)
+        maker = None
+    return DerivAccount(
+        prod, capital, slippage, qty_step, spec.min_notional, symbol=view.info["symbol"],
+        unit_factor=view.k, fee_buy=fee_buy, fee_sell=fee_sell, maker=maker,
+        interest_apr=_num(cfg.get("bunga"), 0, 1, prod.interest_apr),
+        borrow_apr=_num(cfg.get("biaya_pinjam"), 0, 1, prod.borrow_apr),
+        funding_schedule=view.funding_schedule(prod.funding, prod.funding_hours) if prod.kind == "perp" else None,
+        leverage=_num(cfg.get("leverage"), 1, prod.max_lev, prod.default_lev),
     )
 
 
-def session_payload(view: MarketView, acc: Account, mode: str, chart_tf: str, extra: dict[str, Any]) -> dict[str, Any]:
+def session_payload(view: MarketView, acc: Account | DerivAccount, mode: str, chart_tf: str,
+                    extra: dict[str, Any]) -> dict[str, Any]:
     spec = view.spec
+    deriv = isinstance(acc, DerivAccount)
+    product = None
+    if deriv:
+        product = acc.p.public(view.info["symbol"])
+        product.update({"fee_beli": acc.fee_buy, "fee_jual": acc.fee_sell, "maker": acc.maker,
+                        "interest_apr": acc.interest_apr, "borrow_apr": acc.borrow_apr})
+        if view.blind.nama:
+            product["short_list"] = None  # jangan bocorkan nama aset lewat daftar short
     return {
+        "produk": acc.p.id if deriv else "spot", "product": product,
         "type": "session", "mode": mode, "market": view.market, "market_nama": spec.nama,
         "currency": spec.currency, "label": view.label(), "blind": asdict(view.blind),
         "tfs": view.tfs, "tf_label": {tf: LABEL[tf] for tf in view.tfs}, "base_tf": view.base_tf,
@@ -145,7 +183,8 @@ class TradingService:
                 "catatan_fee": s.catatan_fee, "tfs": list(s.tfs)}
             for m, s in MARKETS.items()
         }
-        return {"pasar": summ, "spec": specs, "tf_label": LABEL}
+        return {"pasar": summ, "spec": specs, "tf_label": LABEL,
+                "produk": {"nyata": product_catalog("nyata"), "bebas": product_catalog("bebas")}}
 
     def _pick_asset(self, rng: np.random.Generator, market: str | None, asset: str | None, tf: str) -> str:
         if asset:
@@ -252,6 +291,10 @@ class TradingService:
         acc = tr.account
         price, now = view.last_price(), view.now()
         t = msg.get("type")
+        if isinstance(acc, DerivAccount):
+            return [fill_payload(f) for f in acc.handle(msg, price, now)]
+        if t in ("close", "leverage", "margin_mode", "margin_adjust"):
+            raise GameError("Fitur ini hanya ada di mode Futures atau Margin.")
         fills = []
         if t == "order":
             kind = msg.get("kind", "market")
@@ -288,6 +331,7 @@ class TradingService:
     def summary(self, view: MarketView, tr: Trader) -> dict[str, Any]:
         acc = tr.account
         st = acc.summary(view.last_price(), view.first_price())
+        st["produk"] = acc.p.id if isinstance(acc, DerivAccount) else "spot"
         return {"stats": st, "curve": downsample([(view.disp_time(int(view.base["lt"][view.start_idx])).item(), acc.capital)] + acc.curve),
                 "trades": acc.trades[-300:], "fills": [fill_payload(f) for f in acc.fills[-500:]],
                 "reveal": view.reveal(), "currency": view.spec.currency}
@@ -323,6 +367,9 @@ class TradingService:
         tf = str(cfg.get("tf") or "1h")
         if tf not in LABEL:
             raise GameError("Timeframe tidak dikenal.")
+        pid = str(cfg.get("produk") or "spot")
+        if pid != "spot" and cfg.get("pasar") and pid not in products(str(cfg["pasar"]), rules_of(cfg)):
+            raise GameError("Produk itu tidak tersedia untuk pasar yang dipilih.")
         room = RaceRoom(self._room_code(), "", cfg, chart_tf=tf,
                         speed=_num(cfg.get("kecepatan"), 0.3, 15, 2.0),
                         steps_total=int(_num(cfg.get("langkah"), 20, 1000, 100)))
@@ -367,6 +414,7 @@ class TradingService:
                 "tf": room.chart_tf, "tf_label": LABEL.get(room.chart_tf, room.chart_tf), "speed": room.speed,
                 "steps_total": room.steps_total, "step_n": room.step_n,
                 "pasar": spec.nama if spec else "Acak", "modal": cfg.get("modal"),
+                "produk": str(cfg.get("produk") or "spot"), "aturan": rules_of(cfg),
                 "players": [{"id": p.id, "name": p.name, "online": p.online, "is_host": p.id == room.host_id}
                             for p in room.players.values()]}
 
@@ -375,8 +423,11 @@ class TradingService:
         rows = []
         for p in room.players.values():
             snap = p.account.snapshot(price) if room.view else {}
+            q = p.account.qty
             rows.append({"id": p.id, "name": p.name, "return_pct": snap.get("return_pct", 0.0),
-                         "n_trades": snap.get("n_trades", 0), "in_market": bool(p.account.qty > 0), "online": p.online})
+                         "n_trades": snap.get("n_trades", 0), "in_market": bool(abs(q) > 1e-12), "online": p.online,
+                         "side": "long" if q > 1e-12 else "short" if q < -1e-12 else None,
+                         "n_liq": snap.get("n_liq", 0)})
         rows.sort(key=lambda r: -r["return_pct"])
         return {"type": "race_board", "board": rows, "step_n": room.step_n, "steps_total": room.steps_total}
 
@@ -398,7 +449,15 @@ class TradingService:
             raise GameError("Balapan sudah berjalan.")
         cfg = room.config
         rng = np.random.default_rng()
-        key = self._pick_asset(rng, cfg.get("pasar") or None, cfg.get("aset") or None, room.chart_tf)
+        market = cfg.get("pasar") or None
+        pid = str(cfg.get("produk") or "spot")
+        if pid != "spot" and not market and not cfg.get("aset"):
+            ok = [m for m in ("crypto", "idx", "us", "demo") if pid in products(m, rules_of(cfg))
+                  and eligible_assets(self.store, m, room.chart_tf, 300)]
+            if not ok:
+                raise GameError("Belum ada data pasar yang mendukung produk ini.")
+            market = ok[int(rng.integers(0, len(ok)))]
+        key = self._pick_asset(rng, market, cfg.get("aset") or None, room.chart_tf)
         try:
             room.view = build_view(self.store, key, room.chart_tf, rng, Blind.from_any(cfg.get("buta", True)),
                                    steps=room.steps_total)

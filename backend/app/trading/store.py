@@ -169,6 +169,27 @@ class CandleStore:
             self._cache[ck] = (m, arr)
             return arr
 
+    def funding(self, key: str) -> np.ndarray | None:
+        """Riwayat funding rate futures (kripto) kalau sudah diunduh: record ``t`` (ms UTC), ``r``."""
+        info = self.asset(key)
+        if not info or info["market"] != "crypto":
+            return None
+        from .ingest_binance import funding_path, read_funding
+
+        path = funding_path(self.root, info["symbol"])
+        try:
+            m = path.stat().st_mtime
+        except OSError:
+            return None
+        ck = (key, "funding")
+        with self._lock:
+            hit = self._cache.get(ck)
+            if hit and hit[0] == m:
+                return hit[1]
+            arr = read_funding(path)
+            self._cache[ck] = (m, arr)
+            return arr
+
     def summary(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
         for key, a in self.assets().items():

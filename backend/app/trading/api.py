@@ -184,7 +184,8 @@ class Conn:
             if s is None or s.secret != msg.get("secret"):
                 raise GameError("Sesi sudah berakhir. Mulai sesi baru.")
             await self._attach(s, resumed=True)
-        elif t in ("history", "subscribe", "order", "protect", "cancel", "step", "finish"):
+        elif t in ("history", "subscribe", "order", "protect", "cancel", "close", "leverage", "margin_mode",
+                   "margin_adjust", "step", "finish"):
             await self.play(t, msg)
         elif t in ("race_create", "race_join", "race_rejoin"):
             name, cfg = str(msg.get("name") or ""), msg.get("config") or {}
@@ -236,7 +237,7 @@ class Conn:
         elif t == "subscribe":
             tfs = [tf for tf in (msg.get("tfs") or []) if tf in view.tfs][:3]
             tr.subs = set(tfs) or tr.subs
-        elif t in ("order", "protect", "cancel"):
+        elif t in ("order", "protect", "cancel", "close", "leverage", "margin_mode", "margin_adjust"):
             finished = (self.sess and self.sess.finished) or (self.room and self.room.status == "done")
             if finished or view.done:
                 raise GameError("Sesi sudah selesai.")

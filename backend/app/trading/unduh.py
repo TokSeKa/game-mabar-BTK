@@ -5,7 +5,12 @@ Contoh:
     python -m app.trading.unduh semua --preset penuh     # semua aset, kripto 1m sejak 2017 (puluhan GB)
     python -m app.trading.unduh kripto --simbol BTCUSDT,ETHUSDT --mulai 2020-01
     python -m app.trading.unduh idx --simbol BBCA,TLKM
+    python -m app.trading.unduh saham --preset penuh     # IDX + US saja (tanpa kripto)
+    python -m app.trading.unduh funding                  # riwayat funding rate untuk kripto yang sudah ada
     python -m app.trading.unduh update                   # lengkapi semua aset yang sudah ada
+
+Urutan "semua": saham IDX & US dulu (beberapa menit), baru kripto (bisa berjam-jam di preset penuh),
+supaya saham tetap tersedia walaupun unduhan kripto dihentikan di tengah jalan.
     python -m app.trading.unduh contoh                   # data buatan, tanpa internet
     python -m app.trading.unduh status
 """
@@ -50,9 +55,25 @@ def run_crypto(root: Path, symbols: list[str], since: str | None, workers: int, 
     for i, s in enumerate(symbols, 1):
         log(f"[{i}/{len(symbols)}] {s}")
         try:
-            ingest_symbol(root, s.upper(), since, log, workers=workers, keep_raw=keep_raw)
+            ok = ingest_symbol(root, s.upper(), since, log, workers=workers, keep_raw=keep_raw)
         except Exception as e:  # noqa: BLE001
             log(f"  {s}: gagal ({e})")
+            continue
+        if ok:
+            run_funding(root, s.upper(), workers)
+
+
+def run_funding(root: Path, symbol: str, workers: int = 8) -> None:
+    """Riwayat funding rate untuk mode Futures. Kalau gagal, game memakai 0,01% per 8 jam."""
+    from .ingest_binance import ingest_funding
+
+    try:
+        n = ingest_funding(root, symbol, log, workers=workers)
+    except Exception as e:  # noqa: BLE001
+        log(f"  {symbol}: funding rate tidak terunduh ({e}); mode Futures memakai 0,01%/8 jam")
+        return
+    log(f"  {symbol}: {n:,} data funding rate" if n else f"  {symbol}: tidak ada data funding (bukan perpetual?), "
+        "mode Futures memakai 0,01%/8 jam")
 
 
 def run_yahoo(root: Path, market: str, symbols: list[str]) -> None:
@@ -77,6 +98,9 @@ def status(root: Path) -> None:
     if not summ:
         log("Belum ada data. Jalankan: python -m app.trading.unduh semua --preset cepat")
         return
+    for m, label in (("idx", "Saham IDX"), ("us", "Saham US")):
+        if m not in summ:
+            log(f"{label:<12}    0 aset  (belum diunduh: python -m app.trading.unduh saham)")
     total = 0
     for m in summ.values():
         n = sum(a["candles"] for a in m["assets"])
@@ -88,7 +112,7 @@ def status(root: Path) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="python -m app.trading.unduh", description="Unduh data pasar untuk Kilas Pasar")
-    p.add_argument("perintah", choices=["kripto", "idx", "us", "semua", "update", "contoh", "status"])
+    p.add_argument("perintah", choices=["kripto", "idx", "us", "saham", "semua", "update", "funding", "contoh", "status"])
     p.add_argument("--preset", choices=list(PRESETS), default="cepat")
     p.add_argument("--simbol", help="daftar simbol dipisah koma (menggantikan preset)")
     p.add_argument("--mulai", help="kripto: bulan awal YYYY-MM")
@@ -113,10 +137,21 @@ def main(argv: list[str] | None = None) -> None:
                        a.paralel, not a.hapus_mentah)
         elif a.perintah in ("idx", "us"):
             run_yahoo(root, a.perintah, custom or getattr(preset, a.perintah))
-        elif a.perintah == "semua":
-            run_crypto(root, preset.crypto, a.mulai or preset.crypto_since, a.paralel, not a.hapus_mentah)
+        elif a.perintah == "saham":
             run_yahoo(root, "idx", preset.idx)
             run_yahoo(root, "us", preset.us)
+        elif a.perintah == "semua":
+            # saham dulu: cepat (beberapa menit). Kripto belakangan karena preset penuh butuh berjam-jam.
+            run_yahoo(root, "idx", preset.idx)
+            run_yahoo(root, "us", preset.us)
+            run_crypto(root, preset.crypto, a.mulai or preset.crypto_since, a.paralel, not a.hapus_mentah)
+        elif a.perintah == "funding":
+            syms = custom or sorted(x["symbol"] for x in CandleStore(root).assets().values() if x["market"] == "crypto")
+            if not syms:
+                log("Belum ada data kripto.")
+            log(f"== Funding rate futures (Binance): {len(syms)} aset")
+            for s in syms:
+                run_funding(root, s.upper(), a.paralel)
         elif a.perintah == "update":
             assets = CandleStore(root).assets().values()
             by = {"crypto": [], "idx": [], "us": []}
@@ -125,11 +160,11 @@ def main(argv: list[str] | None = None) -> None:
                     by[x["market"]].append(x["symbol"])
             if not any(by.values()):
                 log("Belum ada data untuk di-update. Jalankan dulu: semua --preset cepat")
-            if by["crypto"]:
-                run_crypto(root, by["crypto"], None, a.paralel, not a.hapus_mentah)
             for m in ("idx", "us"):
                 if by[m]:
                     run_yahoo(root, m, by[m])
+            if by["crypto"]:
+                run_crypto(root, by["crypto"], None, a.paralel, not a.hapus_mentah)
     log(f"Selesai dalam {(time.time() - started) / 60:.1f} menit.")
     status(root)
 

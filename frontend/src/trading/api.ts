@@ -30,17 +30,54 @@ export interface MarketSpec {
   catatan_fee: string;
   tfs: string[];
 }
+export interface ProductSpec {
+  id: 'futures' | 'margin';
+  nama: string;
+  kind: 'perp' | 'margin';
+  fee_beli: number;
+  fee_jual: number;
+  maker: number | null;
+  max_lev: number;
+  default_lev: number;
+  tiers: { cap: number | null; mmr: number; max_lev: number }[] | null;
+  mmr_long: number;
+  mmr_short: number;
+  call_long: number;
+  call_short: number;
+  short: boolean;
+  short_list: string[] | null;
+  short_ok: boolean | null;
+  funding: number;
+  funding_hours: number;
+  interest_apr: number;
+  borrow_apr: number;
+  day_count: number;
+  insurance: boolean;
+  min_short_equity: number;
+  uptick: boolean;
+  per_share: [number, number, number] | null;
+  sec_fee: number;
+  taf: [number, number] | null;
+  modes: string[];
+  catatan: string[];
+}
+export type Aturan = 'nyata' | 'bebas';
 export interface Katalog {
   pasar: Record<string, MarketSummary>;
   spec: Record<string, MarketSpec>;
   tf_label: Record<string, string>;
+  produk?: Record<Aturan, Record<string, Record<string, ProductSpec>>>;
 }
 
 export interface Order {
   id: number;
   side: 'buy' | 'sell';
-  kind: 'limit' | 'stop';
+  kind: 'limit' | 'stop' | 'stop_limit';
   price: number;
+  stop?: number | null;
+  reduce_only?: boolean;
+  post_only?: boolean;
+  triggered?: boolean;
   qty: number;
   created: number;
   label: string;
@@ -77,9 +114,37 @@ export interface AccountSnap {
   max_buy: number;
   orders: Order[];
   n_trades: number;
+  // futures / margin
+  product?: string;
+  kind?: 'perp' | 'margin';
+  mode?: 'cross' | 'isolated';
+  lev?: number;
+  wallet?: number;
+  entry?: number;
+  side?: 'long' | 'short' | null;
+  notional?: number;
+  roe_pct?: number | null;
+  margin?: number;
+  maint?: number;
+  margin_balance?: number;
+  margin_ratio?: number;
+  liq_price?: number | null;
+  call_price?: number | null;
+  margin_call?: boolean;
+  max_lev?: number;
+  short_ok?: boolean;
+  funding_paid?: number;
+  interest_paid?: number;
+  borrow_paid?: number;
+  liq_loss?: number;
+  n_liq?: number;
+  next_funding?: { time: number; rate: number } | null;
+  max_sell?: number;
 }
 export interface SessionInfo {
   type: 'session';
+  produk?: 'spot' | 'futures' | 'margin';
+  product?: ProductSpec | null;
   mode: 'solo' | 'harian' | 'harian-latihan' | 'balapan';
   market: string;
   market_nama: string;
@@ -127,6 +192,15 @@ export interface Stats {
   exposure_pct: number;
   open_qty: number;
   open_value: number;
+  produk?: string;
+  funding_paid?: number;
+  interest_paid?: number;
+  borrow_paid?: number;
+  liq_loss?: number;
+  n_liq?: number;
+  n_long?: number;
+  n_short?: number;
+  max_lev_used?: number;
 }
 export interface TradeRow {
   entry_time: number;
@@ -137,6 +211,12 @@ export interface TradeRow {
   pnl_pct: number;
   fees: number;
   max_qty: number;
+  side?: 'long' | 'short';
+  roe_pct?: number;
+  lev?: number;
+  funding?: number;
+  interest?: number;
+  liquidated?: boolean;
 }
 export interface SummaryMsg {
   type: 'summary';
@@ -167,6 +247,8 @@ export interface BoardRow {
   n_trades: number;
   in_market: boolean;
   online: boolean;
+  side?: 'long' | 'short' | null;
+  n_liq?: number;
 }
 
 // ---------------------------------------------------------------- akun

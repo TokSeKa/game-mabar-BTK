@@ -151,3 +151,39 @@
 .race-lobby .players li { grid-template-columns: minmax(0, 1fr) auto; }
 .akun { max-width: 520px; }
 .pasar-guide h2 { font-family: var(--font-display); font-weight: 400; }
+
+/* ---------- futures & margin ---------- */
+.warn { color: var(--gold); }
+.badge.alt { color: var(--screen); background: var(--gold); box-shadow: none; }
+.deriv { gap: 9px; }
+.dp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.dp-ctl { display: flex; align-items: center; gap: 6px; }
+.seg2.mini button { padding: 5px 10px; font-size: 12.5px; }
+.seg2 button.on.neutral { background: var(--fg); color: var(--bg); }
+.seg2 button:disabled { cursor: default; }
+.lev-btn { font-family: var(--font-mono); min-width: 52px; color: var(--gold); }
+.lev-box { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+.lev-row { display: flex; align-items: center; gap: 10px; }
+.lev-row input[type="range"] { flex: 1; accent-color: var(--gold); }
+.lev-row b { font-family: var(--font-mono); min-width: 48px; text-align: right; }
+.pos-card { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--panel-2); box-shadow: inset 3px 0 0 var(--good), inset 0 0 0 1px var(--line); }
+.pos-card.short { box-shadow: inset 3px 0 0 var(--bad), inset 0 0 0 1px var(--line); }
+.pos-top { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-family: var(--font-mono); font-size: 13.5px; }
+.pos-top b { font-size: 14px; letter-spacing: .04em; }
+.pos-grid { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 12.5px; }
+.pos-grid dt { color: var(--muted); font-weight: 700; }
+.pos-grid dd { margin: 0; text-align: right; font-family: var(--font-mono); }
+.pos-warn { margin: 0; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; font-weight: 700; color: var(--screen); background: var(--gold); }
+.mini-in { width: 96px; min-width: 0; flex: 1 1 80px; background: var(--screen); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; color: var(--fg); font-family: var(--font-mono); font-size: 13px; }
+.seg4 { display: grid; grid-template-columns: repeat(4, 1fr); border-radius: 12px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
+.seg4 button { border: 0; background: transparent; color: var(--muted); font-weight: 800; padding: 9px 4px; font-size: 13px; }
+.seg4 button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.dp-flags { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.dp-flags .toggle { font-size: 13px; }
+.dp-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rules summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--muted); }
+.rules ul { margin: 6px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.rules[open] { display: flex; flex-direction: column; gap: 4px; }
+.tier-tbl { width: 100%; border-collapse: collapse; font-size: 12px; font-family: var(--font-mono); }
+.tier-tbl th { text-align: left; color: var(--muted); font-weight: 800; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+.tier-tbl td { padding: 3px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }

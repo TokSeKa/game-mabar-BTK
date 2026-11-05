@@ -2,9 +2,11 @@
 # Unduh data pasar untuk Kilas Pasar (lewat Docker). Data disimpan di volume Docker "pasar-data",
 # jadi server yang sedang berjalan langsung bisa memakainya (cukup muat ulang halaman).
 #
-#   ./scripts/unduh-data.sh cepat     kripto 5 aset (1m sejak 2024-07), 30 saham IDX, 20 saham US  (beberapa menit)
-#   ./scripts/unduh-data.sh penuh     ±65 kripto 1m sejak 2017, ±140 saham IDX, ±90 saham US      (beberapa jam, puluhan GB)
+#   ./scripts/unduh-data.sh cepat     30 saham IDX, 20 saham US, lalu 5 kripto (1m sejak 2024-07)   (beberapa menit)
+#   ./scripts/unduh-data.sh penuh     ±140 saham IDX, ±90 saham US, lalu ±65 kripto 1m sejak 2017   (beberapa jam, puluhan GB)
+#   ./scripts/unduh-data.sh saham     saham IDX + US saja (preset cepat; "saham-penuh" untuk semua saham)
 #   ./scripts/unduh-data.sh update    lengkapi semua aset yang sudah ada dengan data terbaru (jalankan rutin)
+#   ./scripts/unduh-data.sh funding   riwayat funding rate futures untuk kripto yang sudah ada
 #   ./scripts/unduh-data.sh contoh    data buatan untuk mencoba tanpa internet
 #   ./scripts/unduh-data.sh status    lihat jumlah candle & ukuran data
 #   ./scripts/unduh-data.sh kripto --simbol BTCUSDT,DOGEUSDT --mulai 2021-01   (argumen bebas)
@@ -22,6 +24,9 @@ case "${1:-cepat}" in
   penuh)
     echo "Preset penuh mengunduh puluhan GB dan butuh beberapa jam. Bisa dihentikan (Ctrl+C) dan dilanjutkan kapan saja."
     args=(semua --preset penuh) ;;
+  saham)  args=(saham --preset cepat) ;;
+  saham-penuh) args=(saham --preset penuh) ;;
+  funding) args=(funding) ;;
   update) args=(update) ;;
   contoh) args=(contoh) ;;
   status) args=(status) ;;

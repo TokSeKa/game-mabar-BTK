@@ -6,7 +6,7 @@ Kumpulan game browser untuk dimainkan bareng teman, dalam satu server:
 |---|---|
 | **Arena Mabar** | 11 game main bareng: poker, tenggelamkan kapal, robot arena, deck-builder, tycoon, lelang, dan lainnya. Setiap kursi boleh **manusia atau bot**, dan boleh dicampur. |
 | **Suit Bot Arena** | Program bot batu-gunting-kertas dengan blok ala Scratch atau Python, lalu adu dengan bot teman (2–8 pemain) sampai HP habis. Ada turnamen, mode event, debugger, dan liga. |
-| **Kilas Pasar** | Simulasi trading dengan candle **asli** kripto, saham IDX, dan saham US. Mode buta, fee realistis, indikator & alat gambar. Main sendiri, tantangan harian, atau balapan bareng teman. |
+| **Kilas Pasar** | Simulasi trading dengan candle **asli** kripto, saham IDX, dan saham US. Spot, **futures perpetual** (long/short + leverage), dan **margin + short** saham dengan aturan & fee sesuai pasarnya. Mode buta, indikator & alat gambar. Main sendiri, tantangan harian, atau balapan bareng teman. |
 
 **Daftar semua game dan cara mainnya: [docs/GAMES.md](docs/GAMES.md).**
 
@@ -67,6 +67,15 @@ Kamu dilempar ke satu titik di masa lalu. Candle berikutnya belum terlihat: putu
   - Jenis order: market, limit, stop buy (breakout), stop loss, take profit, dan pasangan OCO.
   - Fee dan slippage bisa diatur.
   - Saham IDX memakai lot 100 lembar.
+- **Futures perpetual (kripto, ala Binance USDⓈ-M).** Long & short, leverage 1–125× bertingkat per besar posisi,
+  cross/isolated (margin bisa ditambah/dikurangi), likuidasi dengan harga likuidasi di chart, funding tiap 8 jam
+  (data funding asli Binance kalau diunduh), fee maker 0,02% / taker 0,05%, order limit/market/stop/stop-limit,
+  reduce-only, post-only, TP/SL posisi.
+- **Margin + short saham.**
+  - US (Reg T): daya beli 2×, maintenance 25%/30%, komisi per lembar + SEC fee + FINRA TAF, bunga margin & biaya pinjam saham harian.
+  - IDX (BEI): short hanya Daftar Efek Short Selling (ASII, BBCA, BRPT, BUMI, INDF sejak 1 Okt 2026), jaminan awal
+    min. Rp50 juta, margin call 135% / forced buy 120%, aturan uptick, bunga margin harian.
+  - Opsi **aturan bebas**: short & futures untuk semua saham (latihan, bukan kondisi nyata).
 - **Indikator:** EMA/SMA (hingga 5 periode), Bollinger Bands, VWAP, volume, RSI, MACD, Stochastic, ATR.
 - **Alat gambar:** garis tren, sinar, garis horizontal, kotak zona, Fibonacci, dan alat ukur (%, jumlah candle). Gambar ikut tampil di semua timeframe.
 - **Tiga mode main:**
@@ -162,6 +171,8 @@ Tes backend Kilas Pasar mencakup:
 - agregasi timeframe dan zona waktu bursa
 - parser arsip Binance (termasuk timestamp mikrodetik 2025)
 - eksekusi order (fee, slippage, gap, urutan SL/TP di dalam candle, OCO, lot IDX)
+- futures & margin: harga likuidasi = maintenance, likuidasi cross/isolated, funding, fee maker/taker, stop-limit,
+  tier leverage, aturan short BEI (daftar efek, uptick, jaminan Rp50 juta, 120%/135%), Reg T (komisi, SEC/TAF, bunga)
 - **tidak ada candle masa depan yang bocor** untuk setiap timeframe
 - mode buta
 - akun, tantangan harian, dan balapan lewat WebSocket
@@ -178,11 +189,13 @@ backend/app/
     guide.py, gen_docs.py    panduan bot markdown per game (python -m app.games.gen_docs → docs/bot/)
   trading/
     timeframes.py, store.py  format candle, agregasi multi-timeframe, katalog (memmap)
-    ingest_binance.py        pengunduh arsip Binance
+    ingest_binance.py        pengunduh arsip Binance (candle spot + funding rate futures)
     ingest_yahoo.py          pengunduh Yahoo Finance (IDX & US)
     unduh.py                 CLI: python -m app.trading.unduh ...
     session.py               tampilan sesi replay (tanpa bocor masa depan, mode buta)
     engine.py                akun spot: order, eksekusi per candle, fee, statistik
+    products.py              aturan & fee futures/margin per pasar (Binance, Reg T, BEI)
+    derivatives.py           akun futures/margin: long/short, leverage, likuidasi, funding, bunga
     service.py, api.py       solo, harian, balapan, REST & WebSocket /ws/pasar
     accounts.py              akun & papan peringkat (SQLite)
 frontend/src/
