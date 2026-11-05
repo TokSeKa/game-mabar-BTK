@@ -49,9 +49,29 @@ if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
 if ($Pilihan -eq "penuh") {
   Write-Host "Preset penuh mengunduh puluhan GB dan butuh beberapa jam. Bisa dihentikan (Ctrl+C) dan dilanjutkan kapan saja." -ForegroundColor Yellow
 }
-Write-Host "==> Mulai (build image pertama kali bisa beberapa menit)..."
+# Unduhan lain yang masih berjalan (container "docker compose run" untuk suitbot)
+if ($Pilihan -ne "status") {
+  $jalan = @(docker ps --filter "label=com.docker.compose.oneoff=True" --filter "label=com.docker.compose.service=suitbot" --format "{{.ID}}|{{.Names}}|{{.RunningFor}}" 2>$null | Where-Object { $_ })
+  if ($jalan.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Ada unduhan lain yang masih berjalan di Docker:" -ForegroundColor Yellow
+    foreach ($c in $jalan) { $p = $c.Split("|"); Write-Host "  $($p[1]) (mulai $($p[2]))" }
+    Write-Host "Kalau dihentikan, data yang sudah selesai tetap aman dan bisa dilanjutkan kapan saja."
+    $j = Read-Host "Hentikan unduhan itu lalu lanjut? (y/N)"
+    if ($j -notmatch "^[yY]") { Write-Host "Oke, biarkan selesai dulu."; exit 1 }
+    foreach ($c in $jalan) { cmd /c "docker stop $($c.Split('|')[0]) >nul 2>&1" }
+  }
+}
+
+Write-Host "==> Menyiapkan image dengan kode terbaru (pertama kali bisa beberapa menit, berikutnya cepat)..."
+cmd /c "docker compose -f docker-compose.yml build suitbot 2>&1"
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Build gagal; memakai image yang sudah ada (pilihan baru seperti 'Saham saja' mungkin belum dikenal)." -ForegroundColor Yellow
+}
+Write-Host "==> Mulai..."
 cmd /c "docker compose -f docker-compose.yml run --rm --no-deps suitbot python -m app.trading.unduh $argumen 2>&1"
 if ($LASTEXITCODE -eq 0) {
   Write-Host ""
   Write-Host "Selesai. Kalau game sedang jalan, cukup muat ulang halaman Kilas Pasar." -ForegroundColor Green
+  Write-Host "(Fitur game yang baru, misalnya Futures, butuh scripts\main-lokal.bat dijalankan ulang sekali.)" -ForegroundColor DarkGray
 }

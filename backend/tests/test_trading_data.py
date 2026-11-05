@@ -105,3 +105,23 @@ def test_store_katalog_dan_segmen(tmp_path):
     import os, time
     os.utime(p, (time.time() + 5, time.time() + 5))
     assert len(s.series("crypto:TESTUSDT", "1d")) == 1
+
+
+def test_kunci_unduh_tidak_macet_oleh_file_sisa(tmp_path):
+    import os
+    import time as _t
+
+    import pytest
+
+    from app.trading.unduh import Lock
+
+    # file kunci sisa pengunduh yang mati mendadak (umurnya baru) tidak boleh memblokir
+    (tmp_path / ".unduh.lock").write_text("12345")
+    os.utime(tmp_path / ".unduh.lock", (_t.time(), _t.time()))
+    with Lock(tmp_path):
+        # tapi pengunduh kedua saat yang pertama masih jalan harus ditolak
+        with pytest.raises(SystemExit, match="Pengunduh lain"):
+            with Lock(tmp_path):
+                pass
+    with Lock(tmp_path):  # setelah selesai bisa dipakai lagi
+        pass

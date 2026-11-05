@@ -18,6 +18,7 @@ supaya saham tetap tersedia walaupun unduhan kripto dihentikan di tengah jalan.
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import sys
 import time
@@ -32,20 +33,61 @@ def log(msg: str) -> None:
 
 
 class Lock:
+    """Supaya dua pengunduh tidak menulis data yang sama bersamaan.
+
+    Memakai ``flock``: kunci otomatis lepas kalau prosesnya mati (jendela ditutup, laptop tidur, kehabisan RAM),
+    jadi file ``.unduh.lock`` yang tertinggal tidak pernah memblokir. Di sistem tanpa ``flock`` (Windows tanpa
+    Docker) dipakai cara lama: file kunci yang umurnya < 6 jam dianggap masih dipakai.
+    """
+
+    BUSY = "Pengunduh lain sedang berjalan. Tunggu sampai selesai, atau hentikan dulu (Ctrl+C di jendelanya)."
+
     def __init__(self, root: Path):
         self.path = root / ".unduh.lock"
+        self.fh = None
+        self.legacy = False
 
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        if self.path.exists():
+        try:
+            import fcntl
+        except ImportError:
+            fcntl = None
+        if fcntl is not None:
+            fh = open(self.path, "a+", encoding="utf-8")
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as e:
+                fh.close()
+                if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK, errno.EACCES):
+                    sys.exit(self.BUSY)
+                fcntl = None  # filesystem tidak mendukung flock (misalnya folder Windows yang di-mount)
+            else:
+                fh.seek(0)
+                fh.truncate()
+                fh.write(f"{os.getpid()} {int(time.time())}\n")
+                fh.flush()
+                self.fh = fh
+                return self
+        self.legacy = True
+        if self.path.exists() and self.path.stat().st_size > 0:
             age = time.time() - self.path.stat().st_mtime
             if age < 6 * 3600:
-                sys.exit("Pengunduh lain sedang berjalan (hapus file .unduh.lock kalau yakin tidak ada).")
+                sys.exit(self.BUSY + f" Kalau yakin tidak ada, hapus {self.path}.")
         self.path.write_text(str(os.getpid()))
         return self
 
     def __exit__(self, *exc):
-        self.path.unlink(missing_ok=True)
+        if self.fh is not None:
+            # file dibiarkan (dikosongkan) supaya tidak ada balapan hapus-buat ulang antar proses
+            try:
+                self.fh.seek(0)
+                self.fh.truncate()
+            finally:
+                self.fh.close()
+                self.fh = None
+        elif self.legacy:
+            self.path.unlink(missing_ok=True)
 
 
 def run_crypto(root: Path, symbols: list[str], since: str | None, workers: int, keep_raw: bool) -> None:

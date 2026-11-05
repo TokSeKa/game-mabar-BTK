@@ -33,4 +33,19 @@ case "${1:-cepat}" in
   *)      args=("$@") ;;
 esac
 
+if [ "${1:-cepat}" != "status" ]; then
+  jalan=$(docker ps --filter "label=com.docker.compose.oneoff=True" --filter "label=com.docker.compose.service=suitbot" --format "{{.ID}} {{.Names}} (mulai {{.RunningFor}})" 2>/dev/null || true)
+  if [ -n "$jalan" ]; then
+    echo "Ada unduhan lain yang masih berjalan di Docker:"
+    echo "$jalan" | sed 's/^[^ ]* /  /'
+    read -r -p "Hentikan unduhan itu lalu lanjut? (y/N) " j
+    case "$j" in
+      [yY]*) echo "$jalan" | awk '{print $1}' | xargs -r docker stop >/dev/null ;;
+      *) echo "Oke, biarkan selesai dulu."; exit 1 ;;
+    esac
+  fi
+fi
+
+echo "==> Menyiapkan image dengan kode terbaru..."
+docker compose -f docker-compose.yml build suitbot || echo "Build gagal; memakai image yang sudah ada." >&2
 exec docker compose -f docker-compose.yml run --rm --no-deps suitbot python -m app.trading.unduh "${args[@]}"
