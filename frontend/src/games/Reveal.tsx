@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NameChip } from './renderers/common';
 import { Grid } from './renderers/kapal';
 import { Card } from './renderers/poker';
+import { TycoonHistory } from './renderers/tycoon';
 
 async function sha256Hex(text: string): Promise<string | null> {
   try {
@@ -46,7 +47,15 @@ function PokerReveal({ reveal, names }: { reveal: any; names: string[] }) {
 }
 
 /** Informasi rahasia yang dibuka setelah match selesai (khusus game tertentu). */
-export function Reveal({ gid, reveal, names }: { gid: string; reveal: any; names: string[] }) {
+export function Reveal({ gid, reveal, names, lastView }: { gid: string; reveal: any; names: string[]; lastView?: any }) {
+  if (gid === 'tycoon' && lastView?.riwayat?.length) {
+    return (
+      <div className="panel">
+        <h3>Riwayat dagang lengkap</h3>
+        <TycoonHistory riwayat={lastView.riwayat} names={names} produk={lastView.produk} me={null} />
+      </div>
+    );
+  }
   if (!reveal || !Object.keys(reveal).length) return null;
   if (gid === 'poker') return <PokerReveal reveal={reveal} names={names} />;
   if (gid === 'kapal' && reveal.papan) {

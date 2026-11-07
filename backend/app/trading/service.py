@@ -432,12 +432,14 @@ class TradingService:
         return {"type": "race_board", "board": rows, "step_n": room.step_n, "steps_total": room.steps_total}
 
     async def _send(self, tr: Trader, msg: dict[str, Any]) -> None:
-        if tr.send is None:
+        send = tr.send
+        if send is None:
             return
         try:
-            await tr.send(msg)
+            await send(msg)
         except Exception:  # noqa: BLE001
-            tr.send, tr.online = None, False
+            if tr.send is send:  # jangan timpa koneksi baru hasil sambung ulang
+                tr.send, tr.online = None, False
 
     async def race_broadcast(self, room: RaceRoom, msg: dict[str, Any]) -> None:
         await asyncio.gather(*(self._send(p, msg) for p in room.players.values()))

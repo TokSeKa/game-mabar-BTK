@@ -19,6 +19,8 @@ Pemain: 1–8. Fungsi wajib: `def aksi():`.
 - Menang pertarungan → pilih 1 dari 3 kartu hadiah (atau lewati) untuk ditambahkan ke dek.
 - Pertarungan yang terlalu lama (lebih dari 20 giliran) membuat musuh mengamuk: kuat +2 setiap giliran.
 - **Skor** = lantai yang diselesaikan × 100 + sisa HP (kalau masih hidup) + 500 kalau bos kalah. Seri: yang memakai giliran lebih sedikit menang.
+- Opsi host: **niat musuh** (terlihat / hanya jenisnya / rahasia), **tingkat kesulitan** (+15% HP & serangan musuh per tingkat),
+  **berkah awal** (satu berkah acak yang sama untuk semua), **kartu kutukan** di dek awal.
 
 ## Aksi yang dikembalikan
 
@@ -41,6 +43,8 @@ Tergantung `info()["fase"]`:
   "katalog": {"tebas": {"id": "tebas", "nama": "Tebas", "biaya": 1, "serang": 6, "ket": "Serang 6."}, ...} }
 ```
 `niat.serang` sudah termasuk kuat & lemah musuh (belum dikurangi blokmu).
+Kalau niat musuh hanya terlihat jenisnya, `niat` berisi `{"jenis": "serang" | "bertahan" | "kutuk"}`; kalau rahasia, `niat` = `{}`.
+`berkah` = berkah match ini (atau None). Kartu `kutukan` tidak bisa dimainkan.
 
 ## Fungsi yang tersedia
 
@@ -55,15 +59,23 @@ Tergantung `info()["fase"]`:
 | `bisa_main(i)` | True kalau kartu ke-i di tangan bisa dimainkan (energi cukup). |
 | `musuh_hidup()` | Indeks musuh yang masih hidup. |
 | `musuh_terlemah()` | Indeks musuh hidup dengan HP + blok paling kecil (atau -1). |
-| `perkiraan_serangan()` | Total kerusakan yang akan dilakukan musuh giliran ini (sebelum dikurangi blokmu). |
+| `perkiraan_serangan()` | Total kerusakan yang akan dilakukan musuh giliran ini (sebelum dikurangi blokmu). Kalau niat musuh disembunyikan: perkiraan terburuk dari pola serangan musuh. |
 | `daftar_kartu()` | Semua kartu di game ini (dict id → detail). |
 
 ## Pengaturan room (diatur host)
 
-| Pengaturan | Default | Keterangan |
-|---|---|---|
-| HP awal | 70 |  |
-| Energi per giliran | 3 |  |
+Pengaturan **Informasi** menyembunyikan sebagian `info()` (nilainya jadi `None` atau tidak ada) supaya bot dan manusia sama-sama bermain dengan kabut. Tulis bot yang tetap jalan kalau suatu nilai `None`.
+
+| Grup | Pengaturan | Default | Keterangan |
+|---|---|---|---|
+| Dasar | HP awal (`hp`) | 70 |  |
+| Dasar | Energi per giliran (`energi`) | 3 |  |
+| Informasi (kabut) | Niat musuh (`niat_musuh`) | terlihat | Tanpa angka niat, kamu harus menebak kapan perlu blok. |
+| Aturan | Tingkat kesulitan (`kesulitan`) | 0 | Setiap tingkat: HP & serangan musuh +15%. |
+| Kejutan | Berkah awal (`berkah`) | False | Semua pemain mendapat satu berkah yang sama (diundi): kuat +1, HP +15, ambil 6 kartu, blok awal 6, atau 4 pilihan hadiah. |
+| Kejutan | Kartu kutukan di dek awal (`kutukan`) | 0 | Kartu kutukan tidak bisa dimainkan dan hanya memenuhi tangan. Bisa dibuang di tempat istirahat. |
+
+**Preset:** *Kabut* (niat_musuh=jenis); *Kacau* (berkah=True, kutukan=2, kesulitan=2)
 
 ## Bahasa bot (sama untuk semua game)
 

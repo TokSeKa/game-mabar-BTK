@@ -58,7 +58,7 @@ def test_rest_hub(client):
 def test_room_manusia_dan_bot_campur_dengan_penonton(client):
     with client.websocket_connect("/ws/main") as a, client.websocket_connect("/ws/main") as b, \
             client.websocket_connect("/ws/main") as tv:
-        a.send_json({"type": "buat", "game": "duapertiga", "nama": "Ani", "settings": {"ronde": 2}, "waktu": 30})
+        a.send_json({"type": "buat", "game": "duapertiga", "nama": "Ani", "settings": {"ronde": 2, "mode_faktor": "tetap"}, "waktu": 30, "jeda_hasil": 0})
         masuk = until(a, "masuk")
         kode = masuk["kode"]
         until(a, "room")
@@ -118,7 +118,7 @@ def test_kursi_sendiri_jadi_bot_lalu_manusia_lagi(client):
 
 def test_waktu_habis_pakai_aksi_bawaan(client):
     with client.websocket_connect("/ws/main") as a:
-        a.send_json({"type": "buat", "game": "kasdesa", "nama": "Ani", "settings": {"ronde": 1}, "waktu": 3})
+        a.send_json({"type": "buat", "game": "kasdesa", "nama": "Ani", "settings": {"ronde": 1, "akhir_rahasia": False}, "waktu": 3})
         until(a, "masuk")
         a.send_json({"type": "tambah_bot", "nama": "B1", "kode": "def aksi():\n    return 10\n"})
         until(a, "room", pred=lambda m: len(m["kursi"]) == 2)
@@ -148,7 +148,7 @@ def test_instan_semua_bot_dan_rating(client, tmp_path):
     bot_kecil = "def aksi():\n    return 5\n"
     bot_besar = "def aksi():\n    return 90\n"
     with client.websocket_connect("/ws/main") as a, client.websocket_connect("/ws/main") as b:
-        a.send_json({"type": "buat", "game": "duapertiga", "nama": "x", "settings": {"ronde": 3}, "jeda": 0, "token": tok_a})
+        a.send_json({"type": "buat", "game": "duapertiga", "nama": "x", "settings": {"ronde": 3, "mode_faktor": "tetap"}, "jeda": 0, "token": tok_a})
         kode = until(a, "masuk")["kode"]
         b.send_json({"type": "gabung", "kode": kode, "nama": "y", "token": tok_b})
         until(b, "masuk")

@@ -23,10 +23,10 @@ function needsTarget(c: CardDef | undefined): boolean {
 
 function GameCard({ c, onClick, disabled, selected, small }: { c: CardDef | undefined; onClick?: () => void; disabled?: boolean; selected?: boolean; small?: boolean }) {
   if (!c) return null;
-  const kind = c.serang || c.serang_semua ? 'atk' : c.blok ? 'def' : 'skill';
+  const kind = (c as any).kutukan ? 'curse' : c.serang || c.serang_semua ? 'atk' : c.blok ? 'def' : 'skill';
   return (
     <button type="button" className={`gcard ${kind} ${selected ? 'sel' : ''} ${small ? 'small' : ''}`} onClick={onClick} disabled={disabled || !onClick}>
-      <span className="gc-cost">{c.biaya}</span>
+      <span className="gc-cost">{(c as any).kutukan ? '✕' : c.biaya}</span>
       <b>{c.nama}</b>
       <span className="gc-ket">{c.ket}</span>
     </button>
@@ -77,6 +77,13 @@ export function RKartu({ view, names, me, canAct, acted, act, replay }: RenderPr
     <div className="game-grid">
       <div className="panel kartu">
         {!mine && <p className="hint">Setiap pemain menempuh {v.lantai_total} lantai sendiri-sendiri dengan musuh yang sama. Papan kanan menunjukkan kemajuan semua orang.</p>}
+        {(v.berkah_teks || v.kesulitan > 0 || (v.niat_musuh && v.niat_musuh !== 'terlihat')) && (
+          <p className="hint">
+            {v.berkah_teks ? `✨ Berkah: ${v.berkah_teks}. ` : ''}
+            {v.kesulitan > 0 ? `💀 Kesulitan ${v.kesulitan} (musuh +${v.kesulitan * 15}%). ` : ''}
+            {v.niat_musuh === 'jenis' ? '🌫️ Niat musuh hanya terlihat jenisnya.' : v.niat_musuh === 'rahasia' ? '🌫️ Niat musuh rahasia.' : ''}
+          </p>
+        )}
         {mine && (
           <>
             <div className="row">

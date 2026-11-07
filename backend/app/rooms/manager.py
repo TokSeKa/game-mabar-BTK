@@ -139,13 +139,15 @@ class RoomManager:
         return room
 
     async def _send(self, p: Player, msg: dict[str, Any]) -> None:
-        if p.send is None:
+        send = p.send
+        if send is None:
             return
         try:
-            await p.send(msg)
+            await send(msg)
         except Exception:  # noqa: BLE001 - koneksi putus, tandai offline
-            p.send = None
-            p.online = False
+            if p.send is send:  # jangan timpa koneksi baru hasil sambung ulang
+                p.send = None
+                p.online = False
 
     async def broadcast(self, room: Room, msg: dict[str, Any]) -> None:
         await asyncio.gather(*(self._send(p, msg) for p in room.players.values() if p.send))

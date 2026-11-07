@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import secrets
+import time
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -16,7 +17,7 @@ from ..bot.errors import BotError
 from .guide import guide_markdown
 from .registry import GAMES
 from .rooms import ArenaManager, GameRoom, RoomError
-from .runner import play_sync
+from .runner import play_sync, sudut_sync
 from .runtime import compile_for
 
 log = logging.getLogger("arena")
@@ -108,9 +109,29 @@ def mount(app: FastAPI, pool=None, db=None) -> ArenaManager:
         if len(names) < g.min_pemain:
             raise HTTPException(400, "Lawan kurang")
         loop = asyncio.get_running_loop()
-        out = await loop.run_in_executor(pool, play_sync, g.id, body.settings, names, codes, secrets.randbits(62))
+        seed = secrets.randbits(62)
+        out = await loop.run_in_executor(pool, play_sync, g.id, body.settings, names, codes, seed)
+        rid = mgr.add_replay({"game": g.id, "settings": out["settings"], "names": names, "seed": seed, "langkah": out["langkah"]})
         return {"ok": True, "result": out["result"], "frames": out["frames"], "log": out["logs"][0],
-                "names": names, "reveal": out["reveal"], "settings": out["settings"]}
+                "names": names, "reveal": out["reveal"], "settings": out["settings"], "replay_id": rid}
+
+    @r.get("/api/main/sudut/{rid}")
+    async def sudut(rid: str, kursi: int = -1) -> dict[str, Any]:
+        """Replay match yang sudah selesai dari sudut pandang satu kursi (kursi -1 = penonton). Match dibuat ulang dari
+        seed + aksi yang tercatat, jadi tampilannya persis seperti yang dilihat kursi itu saat main."""
+        data = mgr.replays.get(rid)
+        if data is None:
+            raise HTTPException(404, "Replay sudah tidak tersimpan (server menyimpan 200 match terakhir).")
+        if not -1 <= kursi < len(data["names"]):
+            raise HTTPException(400, "Kursi tidak ada di match ini.")
+        loop = asyncio.get_running_loop()
+        try:
+            frames = await loop.run_in_executor(pool, sudut_sync, data["game"], data["settings"], data["names"],
+                                                data["seed"], data["langkah"], kursi)
+        except Exception:  # noqa: BLE001
+            log.exception("replay sudut pandang gagal")
+            raise HTTPException(500, "Replay gagal dibuat ulang.") from None
+        return {"kursi": kursi, "frames": frames}
 
     @r.get("/api/main/liga/{game_id}")
     async def liga(game_id: str) -> dict[str, Any]:
@@ -149,6 +170,13 @@ class HubConn:
         async with self.lock:
             await self.ws.send_text(_dumps(msg))
 
+    async def kick(self) -> None:
+        """Tutup koneksi yang macet; klien akan menyambung ulang dan menerima keadaan terbaru."""
+        try:
+            await self.ws.close(code=4000)
+        except Exception:  # noqa: BLE001
+            pass
+
     async def on_raw(self, raw: str) -> None:
         if len(raw) > MAX_MSG:
             await self.send({"type": "error", "message": "Pesan terlalu besar."})
@@ -163,7 +191,7 @@ class HubConn:
         try:
             await self.dispatch(t, msg)
         except RoomError as e:
-            await self.send({"type": "error", "message": str(e), "for": t})
+            await self.send({"type": "error", "message": str(e), "for": t, "kode": e.kode})
 
     async def _enter(self, room: GameRoom, member) -> None:
         self.room, self.member = room, member
@@ -180,27 +208,49 @@ class HubConn:
 
     async def dispatch(self, t: str, msg: dict[str, Any]) -> None:
         if t == "ping":
-            await self.send({"type": "pong"})
+            # jam server + jam klien yang dikirim balik: klien menghitung selisih jam & waktu tempuh supaya hitung mundur pas
+            await self.send({"type": "pong", "t": msg.get("t"), "now": time.time()})
             return
         if msg.get("token") and self.db is not None:
             self.user = self.db.user_for_token(str(msg["token"])) or self.user
         if t in ("buat", "gabung", "kembali"):
             if t == "buat":
-                room = self.mgr.create(str(msg.get("game")), msg.get("settings") or {}, msg.get("waktu"), msg.get("jeda"))
-                member = room.join(str(msg.get("nama") or ""), self.user, self.send, bool(msg.get("tonton")))
+                room = self.mgr.create(str(msg.get("game")), msg.get("settings") or {}, msg.get("waktu"), msg.get("jeda"),
+                                       msg.get("jeda_hasil"))
+                member = room.join(str(msg.get("nama") or ""), self.user, self.send, bool(msg.get("tonton")), self.kick)
             elif t == "gabung":
                 room = self.mgr.get(msg.get("kode"))
-                member = room.join(str(msg.get("nama") or ""), self.user, self.send, bool(msg.get("tonton")))
+                member = room.join(str(msg.get("nama") or ""), self.user, self.send, bool(msg.get("tonton")), self.kick,
+                                   ambil_alih=bool(msg.get("ambil_alih")))
             else:
                 room = self.mgr.get(msg.get("kode"))
-                member = room.rejoin(str(msg.get("member_id")), str(msg.get("token_anggota") or ""), self.send)
+                member = room.rejoin(str(msg.get("member_id")), str(msg.get("token_anggota") or ""), self.send, self.kick)
             await self._enter(room, member)
             return
         room, m = self.room, self.member
         if room is None or m is None or m.id not in room.members:
             raise RoomError("Masuk ke room dulu.")
         if t == "aksi":
-            await room.act(m, msg.get("aksi"))
+            await room.act(m, msg.get("aksi"), msg.get("step"))
+            return
+        if t == "draf":
+            room.draft(m, msg.get("aksi"), msg.get("step"))
+            return
+        if t == "batal":
+            await room.retract(m, msg.get("step"))
+            return
+        if t == "lanjut":
+            await room.next_round(m, msg.get("step"))
+            return
+        if t == "jeda_host":
+            paused = room.toggle_pause(m)
+            await room.broadcast({"type": "jeda_host", "dijeda": paused, "oleh": m.name})
+            await room._push_state([])
+            await room.push_lobby()
+            return
+        if t == "reset_sesi":
+            room.reset_sesi(m)
+            await room.push_lobby()
             return
         if t == "reaksi":
             await room.react(m, str(msg.get("emoji") or ""))
@@ -221,13 +271,15 @@ class HubConn:
         elif t == "hapus_kursi":
             room.remove_seat(m, str(msg.get("seat_id")))
         elif t == "atur":
-            room.set_settings(m, msg.get("settings") or {}, msg.get("waktu"), msg.get("jeda"))
+            room.set_settings(m, msg.get("settings") or {}, msg.get("waktu"), msg.get("jeda"), msg.get("jeda_hasil"),
+                              msg.get("penonton_semua"))
         elif t == "mulai":
             await room.start(m)
             return
         elif t == "keluar":
             if room.status == "main":
-                m.online, m.send = False, None
+                m.online, m.send, m.kick, m.offline_since = False, None, None, 0.0
+                room.wake.set()
             else:
                 room.seats = [s for s in room.seats if s.owner != m.id]
                 room.members.pop(m.id, None)
@@ -242,8 +294,11 @@ class HubConn:
         await room.push_lobby()
 
     async def closed(self) -> None:
-        if self.room is not None and self.member is not None and self.member.send is self.send:
-            self.member.send, self.member.online = None, False
+        # bound method dibuat baru setiap diakses, jadi bandingkan dengan == (bukan `is`, yang selalu False)
+        if self.room is not None and self.member is not None and self.member.send == self.send:
+            self.member.send, self.member.kick, self.member.online = None, None, False
+            self.member.offline_since = time.time()
+            self.room.wake.set()
             if self.room.host_id == self.member.id:
                 nxt = next((x for x in self.room.members.values() if x.online), None)
                 if nxt and self.room.status != "main":

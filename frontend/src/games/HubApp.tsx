@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { load, save } from '../storage';
-import { FrameReplay } from './FrameReplay';
+import { ReplayPanel } from './FrameReplay';
+import { Reveal } from './Reveal';
 import { CopyHubGuide, HubBotLog, HubBotPanel, loadBotCode } from './HubBotPanel';
 import { HubRoom, RulesText, type HubEntry } from './HubRoom';
 import {
@@ -142,6 +143,7 @@ function CreateRoom({ meta, go }: { meta: GameMeta; go: (r: MabarRoute) => void 
   const [cfg, setCfg] = useState(() => defaultSettings(meta));
   const [waktu, setWaktu] = useState(meta.timer);
   const [jeda, setJeda] = useState(0.6);
+  const [jedaHasil, setJedaHasil] = useState(meta.jeda_hasil);
   return (
     <div className="two-col">
       <div className="panel">
@@ -157,10 +159,15 @@ function CreateRoom({ meta, go }: { meta: GameMeta; go: (r: MabarRoute) => void 
           <label className="field">Jeda langkah bot (detik)
             <input type="number" min={0} max={5} step={0.1} value={jeda} onChange={(e) => setJeda(Number(e.target.value))} />
           </label>
+          {meta.jeda_pada.length > 0 && (
+            <label className="field">Jeda lihat hasil ronde (detik)
+              <input type="number" min={0} max={30} step={1} value={jedaHasil} onChange={(e) => setJedaHasil(Number(e.target.value))} />
+            </label>
+          )}
         </div>
         <button type="button" className="btn primary big" disabled={!name.trim()} onClick={() => go({
           page: 'room', key: Date.now(),
-          entry: { action: 'buat', game: meta.id, nama: name.trim(), settings: cfg, waktu, jeda },
+          entry: { action: 'buat', game: meta.id, nama: name.trim(), settings: cfg, waktu, jeda, jeda_hasil: jedaHasil },
         })}>Buat room</button>
         <p className="hint">
           Setelah room dibuat, bagikan kodenya. Di lobby kamu bisa menambah bot (dari template atau kodemu), mengganti kursimu jadi bot,
@@ -249,7 +256,8 @@ function Practice({ meta, toast }: { meta: GameMeta; toast: (m: string, err?: bo
               ))}
             </ol>
           </div>
-          <FrameReplay frames={res.frames} meta={meta} names={res.names} settings={res.settings} />
+          <ReplayPanel frames={res.frames} meta={meta} names={res.names} settings={res.settings} replayId={res.replay_id} />
+          <Reveal gid={meta.id} reveal={res.reveal} names={res.names} lastView={res.frames[res.frames.length - 1]?.view} />
           <HubBotLog name={res.names[0]} log={res.log} />
         </>
       )}

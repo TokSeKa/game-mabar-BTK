@@ -12,17 +12,25 @@ Pemain: 2–12. Fungsi wajib: `def aksi():`.
 - Kalau yang datang **tidak lebih dari kapasitas** (default 60% pemain, dibulatkan ke bawah, minimal 1), semua yang datang dapat **+1** (asyik).
 - Kalau yang datang **melebihi kapasitas**, semua yang datang dapat **−1** (sumpek). Yang di rumah selalu 0.
 - Semua pilihan dibuka setelah malam selesai. Skor tertinggi setelah semua malam menang.
+- Opsi host: **beberapa tempat** (🎡 Pasar Malam +1, 🎤 Konser +2 dengan kapasitas separuhnya, 🍢 Bazar Kuliner +3 dengan kapasitas
+  kecil), **kapasitas berubah** tiap malam (diumumkan atau rahasia), **hadiah/hukuman**, **malam spesial** (Festival / Hujan), dan
+  **jumlah pengunjung rahasia**.
 
 ## Aksi yang dikembalikan
 
-Teks `"datang"` atau `"rumah"` (atau `True`/`False`).
+Teks `"datang"` atau `"rumah"` (atau `True`/`False`). Kalau ada beberapa tempat: `"pasar"`, `"konser"`, atau `"bazar"`.
 
 ## Isi `info()`
 
 ```
 { "malam": 4, "malam_total": 20, "kapasitas": 3, "skor": {"Budi": 2, ...},
-  "riwayat": [ {"malam": 1, "datang": ["Budi", "Ani"], "jumlah": 2, "ramai": false} ] }
+  "tempat": [{"id": "pasar", "nama": "🎡 Pasar Malam", "kapasitas": 3, "hadiah": 1}, ...],
+  "spesial": None, "hukuman": 1,
+  "riwayat": [ {"malam": 1, "datang": ["Budi", "Ani"], "jumlah": 2, "ramai": false,
+                "tempat": [{"id": "pasar", "kapasitas": 3, "jumlah": 2, "ramai": False, "datang": [...]}]} ] }
 ```
+- `kapasitas`, `jumlah`, `ramai` di tingkat atas adalah milik tempat pertama (Pasar Malam), supaya bot lama tetap jalan.
+- `kapasitas` None kalau kapasitas dirahasiakan. Kalau jumlah pengunjung rahasia, `jumlah` & `datang` di riwayat None (kecuali dirimu).
 
 ## Fungsi yang tersedia
 
@@ -36,10 +44,20 @@ Teks `"datang"` atau `"rumah"` (atau `True`/`False`).
 
 ## Pengaturan room (diatur host)
 
-| Pengaturan | Default | Keterangan |
-|---|---|---|
-| Jumlah malam | 20 |  |
-| Kapasitas nyaman (%) | 60 | Persentase pemain yang boleh datang supaya tetap nyaman. |
+Pengaturan **Informasi** menyembunyikan sebagian `info()` (nilainya jadi `None` atau tidak ada) supaya bot dan manusia sama-sama bermain dengan kabut. Tulis bot yang tetap jalan kalau suatu nilai `None`.
+
+| Grup | Pengaturan | Default | Keterangan |
+|---|---|---|---|
+| Dasar | Jumlah malam (`malam`) | 20 |  |
+| Dasar | Kapasitas nyaman (%) (`kapasitas`) | 60 | Persentase pemain yang boleh datang supaya tetap nyaman. |
+| Informasi (kabut) | Jumlah pengunjung rahasia (`jumlah_rahasia`) | False | Setelah malam, hanya diumumkan nyaman atau sumpek; jumlah dan siapa yang datang tidak dibuka. |
+| Aturan | Kapasitas tiap malam (`kapasitas_mode`) | tetap | Berubah: kapasitas acak 70%–130% dari biasanya. |
+| Aturan | Jumlah tempat hiburan (`tempat`) | 1 | 2–3 tempat: 🎡 Pasar Malam (kapasitas besar, +1), 🎤 Konser (separuhnya, +2), 🍢 Bazar Kuliner (kecil, +3). |
+| Aturan | Hadiah nyaman (`hadiah`) | 1 | Poin untuk yang datang ke tempat yang nyaman (dikali pengali tempat). |
+| Aturan | Hukuman sumpek (`hukuman`) | 1 | Poin yang hilang kalau tempatnya terlalu ramai. |
+| Kejutan | Malam spesial (%) (`malam_spesial`) | 0 | Peluang tiap malam jadi 🎉 Festival (kapasitas ×1,5, hadiah ×2) atau 🌧️ Hujan (kapasitas separuh). Diumumkan sore hari. |
+
+**Preset:** *Kabut* (jumlah_rahasia=True, kapasitas_mode=rahasia); *Kacau* (tempat=3, kapasitas_mode=berubah, malam_spesial=30)
 
 ## Bahasa bot (sama untuk semua game)
 
@@ -72,14 +90,14 @@ def aksi():
 
 ### Peramal 3 Malam
 
-Memperkirakan pengunjung dari rata-rata 3 malam terakhir.
+Memperkirakan pengunjung dari rata-rata 3 malam terakhir (kalau jumlahnya terlihat).
 
 ```python
 def aksi():
     i = info()
-    r = i["riwayat"][-3:]
-    if not r:
-        return "datang"
+    r = [x for x in i["riwayat"][-3:] if x["jumlah"] != None]
+    if not r or i["kapasitas"] == None:
+        return "datang" if i["malam"] % 2 == 1 else "rumah"
     perkiraan = sum(x["jumlah"] for x in r) / len(r)
     return "datang" if perkiraan < i["kapasitas"] else "rumah"
 ```
@@ -100,6 +118,23 @@ Memakai nomor kursi supaya tiap malam yang datang pas kapasitas (kalau semua mem
 ```python
 def aksi():
     i = info()
-    return "datang" if (i["malam"] + saya()) % jumlah_pemain() < i["kapasitas"] else "rumah"
+    kap = i["kapasitas"]
+    if kap == None:
+        kap = jumlah_pemain() // 2
+    return "datang" if (i["malam"] + saya()) % jumlah_pemain() < kap else "rumah"
+```
+
+### Pemburu Hadiah
+
+Kalau ada beberapa tempat, bergiliran ke tempat berhadiah besar sesuai nomor kursi.
+
+```python
+def aksi():
+    i = info()
+    t = i["tempat"]
+    k = (i["malam"] + saya()) % (len(t) + 1)
+    if k == len(t):
+        return "rumah"
+    return t[len(t) - 1 - k]["id"]
 ```
 

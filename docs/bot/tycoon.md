@@ -18,6 +18,8 @@ Pemain: 2–8. Fungsi wajib: `def aksi():`.
   gejolak acak ±15% yang baru ketahuan malamnya. Ramalan cuaca besok tersedia, benar sekitar 75%.
 - Permintaan dasar membesar sesuai jumlah pemain supaya pasar tidak terlalu sempit.
 - Uang terbanyak di akhir menang.
+- Opsi host: **dagangan pesaing rahasia**, **ketepatan ramalan** (0 = tanpa ramalan), **stok tahan sehari** (sisa barang bisa dijual
+  lagi besok untuk produk yang sama, dijual lebih dulu dari barang baru), dan **kejadian pasar** (razia, viral, bahan naik, subsidi).
 
 ## Aksi yang dikembalikan
 
@@ -34,7 +36,10 @@ Pemain: 2–8. Fungsi wajib: `def aksi():`.
   "riwayat": [ {"hari": 1, "cuaca": "cerah", "acara": None, "pembeli": {"sate": 160, ...},
                 "jual": {"Budi": {"produk": "sate", "jumlah": 30, "harga": 14000, "iklan": 0, "terjual": 30, "untung": 240000}, "Ani": "tutup"}} ] }
 ```
-`pengaruh` = pengali permintaan hari ini (cuaca × akhir pekan × acara), belum termasuk gejolak acak dan jumlah pemain.
+`pengaruh` = pengali permintaan hari ini (cuaca × akhir pekan × acara × kejadian), belum termasuk gejolak acak dan jumlah pemain.
+`produk[k]["modal"]` adalah modal HARI INI (bisa berubah karena kejadian pasar) dan `dilarang` True kalau produk itu dirazia.
+`kejadian` = kejadian pasar hari ini atau None. `stok_saya` = sisa barang kemarin yang masih bisa dijual hari ini (atau None).
+Kalau dagangan pesaing rahasia, entri `jual` pedagang lain berisi `{"rahasia": True}` dan setiap hari punya `penjual` (jumlah penjual per produk).
 
 ## Fungsi yang tersedia
 
@@ -48,15 +53,24 @@ Pemain: 2–8. Fungsi wajib: `def aksi():`.
 | `uang_saya()` | Uangmu sekarang (Rp). |
 | `maks_beli(produk, iklan=0)` | Jumlah barang terbanyak yang bisa kamu beli dengan uangmu. |
 | `perkiraan_pembeli(produk, harga, iklan=0)` | Perkiraan pembeli untukmu kalau pesaing memakai harga & iklan seperti kemarin (tanpa gejolak acak). |
-| `pesaing_kemarin(produk)` | List penjual produk itu kemarin: {'nama', 'harga', 'iklan', 'jumlah', 'terjual'}. |
+| `pesaing_kemarin(produk)` | List penjual produk itu kemarin: {'nama', 'harga', 'iklan', 'jumlah', 'terjual'}. Kosong kalau dagangan pesaing rahasia. |
+| `jumlah_penjual_kemarin(produk)` | Banyaknya pedagang lain yang menjual produk itu kemarin (selalu terlihat). |
 | `untung_per_barang(produk, harga)` | harga − modal per barang. |
 
 ## Pengaturan room (diatur host)
 
-| Pengaturan | Default | Keterangan |
-|---|---|---|
-| Jumlah hari | 15 |  |
-| Modal awal (Rp) | 200000 |  |
+Pengaturan **Informasi** menyembunyikan sebagian `info()` (nilainya jadi `None` atau tidak ada) supaya bot dan manusia sama-sama bermain dengan kabut. Tulis bot yang tetap jalan kalau suatu nilai `None`.
+
+| Grup | Pengaturan | Default | Keterangan |
+|---|---|---|---|
+| Dasar | Jumlah hari (`hari`) | 15 |  |
+| Dasar | Modal awal (Rp) (`modal`) | 200000 |  |
+| Informasi (kabut) | Dagangan pesaing rahasia (`pesaing_rahasia`) | False | Produk, harga, iklan, dan hasil jualan pedagang lain tidak dibuka (total uang tetap terlihat); yang terlihat hanya jumlah penjual & pembeli tiap produk. |
+| Informasi (kabut) | Ketepatan ramalan cuaca (%) (`ramalan`) | 75 | 0 = tidak ada ramalan sama sekali. |
+| Aturan | Stok tahan sehari (`stok_awet`) | False | Barang yang tidak laku tidak langsung basi: bisa dijual lagi besok (produk yang sama, tanpa modal), setelah itu basi. |
+| Kejutan | Kejadian pasar (%) (`event_pasar`) | 0 | Peluang tiap hari ada kejadian (diumumkan pagi): razia (satu produk dilarang), viral (permintaan ×2,5), bahan naik (modal ×1,5), atau subsidi (modal separuh). |
+
+**Preset:** *Kabut* (pesaing_rahasia=True, ramalan=50); *Kacau* (event_pasar=40, stok_awet=True)
 
 ## Bahasa bot (sama untuk semua game)
 

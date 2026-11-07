@@ -47,6 +47,9 @@ export function RPoker({ view, names, me, canAct, acted, act, replay }: RenderPr
         <div className="row">
           <b>Tangan {v.tangan}/{v.tangan_maks}</b>
           <span className="tag-mini">blind {v.sb}/{v.bb}</span>
+          {v.ante > 0 && <span className="tag-mini">ante {Math.floor((v.bb * v.ante) / 100)}</span>}
+          {v.short_deck && <span className="tag-mini host" title="Kartu 6–A; flush > full house; A-6-7-8-9 straight">Short Deck</span>}
+          {v.bounty > 0 && <span className="tag-mini" title="Skor = chip + bounty">🎯 bounty {fmt(v.bounty)}</span>}
           <span className="tag-mini">{v.jalan}</span>
           <span className="spacer" />
           <span className="hint" title="sha256('poker|' + seed) — seed dibuka di akhir">hash dek {v.hash_dek}</span>
@@ -69,7 +72,7 @@ export function RPoker({ view, names, me, canAct, acted, act, replay }: RenderPr
                   {v.small_blind === n && <span className="tag-mini">SB</span>}
                   {v.big_blind === n && <span className="tag-mini">BB</span>}
                 </div>
-                <div className="ps-chip">{fmt(v.chip?.[n] ?? 0)} chip</div>
+                <div className="ps-chip">{v.chip_samar && n !== myName ? '≈' : ''}{fmt(v.chip?.[n] ?? 0)} chip{v.bounty_dapat?.[n] ? ` · 🎯${v.bounty_dapat[n]}` : ''}</div>
                 <div className="ps-bet">{v.taruhan?.[n] ? `taruhan ${fmt(v.taruhan[n])}` : ' '}</div>
                 {STATUS_LABEL[st] && <div className={`ps-st ${st}`}>{STATUS_LABEL[st]}</div>}
               </div>
@@ -142,11 +145,14 @@ export function RPoker({ view, names, me, canAct, acted, act, replay }: RenderPr
       </div>
       <ScoreBoard
         rows={names
-          .map((n, i) => ({ name: n, idx: i, c: v.chip?.[n] ?? 0 }))
+          .map((n, i) => ({ name: n, idx: i, c: (v.chip?.[n] ?? 0) + (v.bounty ?? 0) * (v.bounty_dapat?.[n] ?? 0) }))
           .sort((a, b) => b.c - a.c)
-          .map((r) => ({ name: r.name, idx: r.idx, value: fmt(r.c), dim: v.status?.[r.name] === 'keluar' }))}
+          .map((r) => ({
+            name: r.name, idx: r.idx, value: `${v.chip_samar && r.name !== myName ? '≈' : ''}${fmt(r.c)}`, dim: v.status?.[r.name] === 'keluar',
+            sub: v.bounty_dapat?.[r.name] ? `🎯 ${v.bounty_dapat[r.name]} bounty` : undefined,
+          }))}
         me={me}
-        title="Chip"
+        title={v.bounty > 0 ? 'Chip + bounty' : 'Chip'}
       />
     </div>
   );

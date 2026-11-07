@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .base import Game
+from .base import GRUP, Game
 
 BAHASA = """## Bahasa bot (sama untuk semua game)
 
@@ -53,9 +53,16 @@ def guide_markdown(g: Game) -> str:
     for d in g.all_docs():
         lines.append(f"| `{d['tanda']}` | {d['ket']} |")
     if g.settings:
-        lines += ["", "## Pengaturan room (diatur host)", "", "| Pengaturan | Default | Keterangan |", "|---|---|---|"]
+        lines += ["", "## Pengaturan room (diatur host)", "",
+                  "Pengaturan **Informasi** menyembunyikan sebagian `info()` (nilainya jadi `None` atau tidak ada) supaya bot "
+                  "dan manusia sama-sama bermain dengan kabut. Tulis bot yang tetap jalan kalau suatu nilai `None`.", "",
+                  "| Grup | Pengaturan | Default | Keterangan |", "|---|---|---|---|"]
         for st in g.settings:
-            lines.append(f"| {st.label} | {st.default} | {st.ket} |")
+            lines.append(f"| {GRUP.get(st.grup, st.grup)} | {st.label} (`{st.id}`) | {st.default} | {st.ket} |")
+        presets = [p for p in g.all_presets() if p["nilai"]]
+        if presets:
+            lines += ["", "**Preset:** " + "; ".join(
+                f"*{p['nama']}* ({', '.join(f'{k}={v}' for k, v in p['nilai'].items())})" for p in presets)]
     lines += ["", BAHASA, "## Contoh bot", ""]
     for t in g.templates:
         lines += [f"### {t['nama']}", "", t["ket"], "", "```python", t["kode"].rstrip(), "```", ""]

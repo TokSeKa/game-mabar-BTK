@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import type { GameMeta } from '../hubApi';
 import { fmt, seatColor } from '../hubApi';
 
@@ -13,6 +13,8 @@ export interface RenderProps {
   /** aksi untuk langkah ini sudah terkirim */
   acted: boolean;
   act: (a: unknown) => void;
+  /** pilihan yang sedang diatur tapi belum dikirim; dikirim otomatis oleh server kalau waktu habis */
+  draft?: (a: unknown) => void;
   replay: boolean;
   events: any[];
   settings: Record<string, any>;
@@ -83,14 +85,20 @@ export function NumberPicker({ value, onChange, min, max, step = 1, label, disab
   );
 }
 
-/** State lokal yang kembali ke ``initial`` setiap kali ``resetKey`` berubah (misalnya ronde baru). */
+/**
+ * State lokal yang kembali ke ``initial`` setiap kali ``resetKey`` berubah (misalnya ronde baru).
+ * Reset dilakukan langsung saat render (bukan di effect), jadi nilai ronde lalu tidak pernah sempat
+ * tampil atau terkirim sebagai draf untuk ronde baru.
+ */
 export function useResetState<T>(initial: T, resetKey: unknown): [T, (v: T) => void] {
-  const [v, setV] = useState(initial);
-  useEffect(() => {
-    setV(initial);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetKey]);
-  return [v, setV];
+  const [st, setSt] = useState<{ v: T; k: unknown }>(() => ({ v: initial, k: resetKey }));
+  let cur = st;
+  if (!Object.is(st.k, resetKey)) {
+    cur = { v: initial, k: resetKey };
+    setSt(cur);
+  }
+  const set = useCallback((v: T) => setSt((prev) => ({ v, k: prev.k })), []);
+  return [cur.v, set];
 }
 
 export function NameChip({ name, idx }: { name: string; idx: number }) {

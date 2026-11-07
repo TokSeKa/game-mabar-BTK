@@ -13,6 +13,7 @@ Alur satu langkah:
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import random
 from dataclasses import dataclass
@@ -22,6 +23,14 @@ from typing import Any
 class ActionError(ValueError):
     """Aksi tidak valid. Pesannya ditampilkan ke pemain/bot (turunan ValueError supaya error di fungsi bantu
     bot juga diterjemahkan jadi pesan yang jelas oleh interpreter)."""
+
+
+GRUP = {
+    "dasar": "Dasar",
+    "informasi": "Informasi (kabut)",
+    "aturan": "Aturan",
+    "kejutan": "Kejutan",
+}
 
 
 @dataclass
@@ -34,6 +43,8 @@ class Setting:
     max: float | None = None
     pilihan: list[list[str]] | None = None   # [[nilai, label], ...]
     ket: str = ""
+    grup: str = "dasar"        # dasar | informasi | aturan | kejutan (lihat GRUP)
+    jika: dict[str, Any] | None = None       # tampil hanya kalau setting lain bernilai ini (nilai atau list nilai)
 
     def clean(self, v: Any) -> Any:
         try:
@@ -55,7 +66,8 @@ class Setting:
 
     def meta(self) -> dict[str, Any]:
         return {"id": self.id, "label": self.label, "jenis": self.jenis, "default": self.default,
-                "min": self.min, "max": self.max, "pilihan": self.pilihan, "ket": self.ket}
+                "min": self.min, "max": self.max, "pilihan": self.pilihan, "ket": self.ket, "grup": self.grup,
+                "jika": self.jika}
 
 
 def rng(state: dict[str, Any], *keys: Any) -> random.Random:
@@ -91,6 +103,9 @@ class Game:
     format_info: str = ""            # markdown: isi info()
     label_skor: str = "Poin"
     max_frames: int = 1500           # batas frame replay yang disimpan
+    jeda_pada: tuple[str, ...] = ()  # jenis event yang menandai akhir ronde (dipakai untuk jeda lihat hasil)
+    jeda_hasil: float = 0.0          # detik bawaan jeda lihat hasil setelah event di atas (kalau ada manusia)
+    presets: list[dict[str, Any]] = []   # [{"id", "nama", "ket", "nilai": {setting: nilai}}] di luar "Standar"
 
     # ------------------------------------------------------------ wajib diisi game
     def init(self, cfg: dict[str, Any], names: list[str], seed: int) -> dict[str, Any]:
@@ -118,6 +133,21 @@ class Game:
         raise NotImplementedError
 
     # ------------------------------------------------------------ boleh di-override
+    def full_view(self, s: dict[str, Any]) -> dict[str, Any]:
+        """Tampilan lengkap TANPA kabut (semua rahasia terbuka). Dipakai untuk replay setelah match selesai dan untuk
+        penonton kalau host mengizinkan. Game dengan opsi kabut meng-override ini; ``public()`` tetap tampilan berkabut."""
+        return self.public(s)
+
+    def event_for(self, s: dict[str, Any], e: dict[str, Any], viewer: Any) -> dict[str, Any] | None:
+        """Event langsung (live) menurut penonton ``viewer``: nomor kursi, None (penonton berkabut), atau "semua".
+        Game berkabut menyembunyikan rahasia di sini; None = event tidak dikirim ke penonton itu."""
+        return e
+
+    def frame_view(self, s: dict[str, Any]) -> dict[str, Any]:
+        """Tampilan untuk satu frame replay (lengkap, rahasia terbuka). Disalin penuh: tampilan sering memuat list state
+        yang terus bertambah (misalnya ``riwayat``), dan tanpa salinan semua frame replay ikut berisi riwayat akhir."""
+        return copy.deepcopy(self.full_view(s))
+
     def observe(self, s: dict[str, Any], p: int) -> dict[str, Any]:
         return {**self.public(s), "saya": p, "nama_saya": s["names"][p]}
 
@@ -145,11 +175,16 @@ class Game:
         cfg = cfg or {}
         return {st.id: st.clean(cfg.get(st.id, st.default)) for st in self.settings}
 
+    def all_presets(self) -> list[dict[str, Any]]:
+        """Preset aturan: "Standar" (semua bawaan) + preset game. Nilai preset hanya menyentuh grup selain "dasar"."""
+        return [{"id": "standar", "nama": "Standar", "ket": "Semua pengaturan bawaan.", "nilai": {}}] + list(self.presets)
+
     def meta(self) -> dict[str, Any]:
         return {
             "id": self.id, "nama": self.nama, "ringkas": self.ringkas, "kategori": self.kategori,
             "min_pemain": self.min_pemain, "max_pemain": self.max_pemain, "fungsi_bot": self.fungsi_bot,
             "timer": self.timer, "mandiri": self.mandiri, "settings": [x.meta() for x in self.settings],
+            "jeda_pada": list(self.jeda_pada), "jeda_hasil": self.jeda_hasil, "presets": self.all_presets(),
             "templates": self.templates, "lib_docs": self.all_docs(), "label_skor": self.label_skor,
             "aturan": self.aturan, "format_aksi": self.format_aksi,
         }

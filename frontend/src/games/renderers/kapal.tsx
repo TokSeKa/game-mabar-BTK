@@ -1,9 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NameChip, TurnNote, idxOf, useResetState, type RenderProps } from './common';
 
 type Place = [number, number, 'H' | 'V'] | null;
 
-const CELL_LABEL: Record<string, string> = { '.': 'kosong', K: 'kapalku', x: 'meleset', o: 'kena', '#': 'tenggelam' };
+const CELL_LABEL: Record<string, string> = {
+  '.': 'kosong', K: 'kapalku', x: 'meleset', o: 'kena', '#': 'tenggelam', m: 'ranjauku', '*': 'ranjau meledak',
+};
+const CELL_CLASS: Record<string, string> = { '#': 'sunk', '.': 'e', '*': 'boom', m: 'mine' };
 
 function cellsOf(p: Place, size: number): [number, number][] {
   if (!p) return [];
@@ -72,7 +75,7 @@ export function Grid({ rows, onCell, label, highlight, preview }: {
               key={`${r}-${c}`}
               type="button"
               role="gridcell"
-              className={`cell s-${ch === '#' ? 'sunk' : ch === '.' ? 'e' : ch} ${pv ? `pv-${pv}` : ''} ${hl ? 'hl' : ''}`}
+              className={`cell s-${CELL_CLASS[ch] ?? ch} ${pv ? `pv-${pv}` : ''} ${hl ? 'hl' : ''}`}
               disabled={!onCell}
               onClick={onCell ? () => onCell(r, c) : undefined}
               aria-label={`baris ${r} kolom ${c}: ${CELL_LABEL[ch] ?? ch}`}
@@ -84,7 +87,7 @@ export function Grid({ rows, onCell, label, highlight, preview }: {
   );
 }
 
-export function RKapal({ view, names, me, canAct, acted, act, replay, events }: RenderProps) {
+export function RKapal({ view, names, me, canAct, acted, act, replay, events, draft }: RenderProps) {
   const v = view;
   const n: number = v.ukuran;
   const fleet: number[] = v.armada;
@@ -92,9 +95,16 @@ export function RKapal({ view, names, me, canAct, acted, act, replay, events }: 
   const [layout, setLayout] = useResetState<Place[]>(fleet.map(() => null), `${v.fase}-${me}`);
   const [sel, setSel] = useState(0);
   const [orient, setOrient] = useState<'H' | 'V'>('H');
+  const [sonar, setSonar] = useState(false);
+  const mySonar: number = me != null ? v.sonar_sisa?.[names[me]] ?? 0 : 0;
   const bad = useMemo(() => layoutProblems(layout, fleet, n), [layout, fleet, n]);
   const myName = me != null ? names[me] : null;
   const placing = v.fase === 'susun' && canAct;
+  // susunan lengkap & valid = dikirim otomatis kalau waktu habis
+  useEffect(() => {
+    if (placing && layout.every((p) => p) && bad.size === 0) draft?.(layout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout, bad, placing]);
 
   const placePreview = useMemo(() => {
     const m = new Map<string, 'ok' | 'bad' | 'sel'>();
@@ -147,9 +157,25 @@ export function RKapal({ view, names, me, canAct, acted, act, replay, events }: 
               highlight={lastShot && lastShot.penembak !== myName ? [lastShot.baris, lastShot.kolom] : null} />
           </div>
           <div>
-            <h3 className="sub-h">Papan {v.lawan} <span className="hint">(sisa kapal: {(v.kapal_lawan_sisa ?? []).join(', ') || '–'})</span></h3>
+            <h3 className="sub-h">Papan {v.lawan} <span className="hint">(sisa kapal: {v.kapal_lawan_sisa ? v.kapal_lawan_sisa.join(', ') || '–'
+              : v.jumlah_kapal_lawan_sisa != null ? `${v.jumlah_kapal_lawan_sisa} kapal` : 'rahasia'})</span></h3>
+            {canAct && v.fase === 'tembak' && (v.salvo || mySonar > 0) && (
+              <div className="row">
+                {v.salvo && <span className="tag-mini">🎯 sisa tembakan giliran ini: {v.sisa_tembak}</span>}
+                {mySonar > 0 && (
+                  <button type="button" className={`btn small ${sonar ? 'primary' : ''}`} onClick={() => setSonar(!sonar)}>
+                    📡 Sonar ({mySonar}){sonar ? ': klik pusat area 3×3' : ''}
+                  </button>
+                )}
+              </div>
+            )}
             <Grid rows={v.papan_tembak} label={`Papan ${v.lawan}`}
-              onCell={canAct && v.fase === 'tembak' ? (r, c) => v.papan_tembak[r][c] === '.' && act([r, c]) : undefined}
+              onCell={canAct && v.fase === 'tembak' ? (r, c) => {
+                if (sonar) {
+                  setSonar(false);
+                  act({ sonar: [r, c] });
+                } else if (v.papan_tembak[r][c] === '.') act([r, c]);
+              } : undefined}
               highlight={lastShot && lastShot.penembak === myName ? [lastShot.baris, lastShot.kolom] : null} />
           </div>
         </div>
@@ -159,7 +185,8 @@ export function RKapal({ view, names, me, canAct, acted, act, replay, events }: 
             const target = names.find((x) => x !== nm)!;
             return (
               <div key={nm}>
-                <h3 className="sub-h">Tembakan {nm} → {target} <span className="hint">(sisa: {(v.sisa?.[target] ?? []).join(', ') || '–'})</span></h3>
+                <h3 className="sub-h">Tembakan {nm} → {target} <span className="hint">(sisa: {v.sisa?.[target] ? v.sisa[target].join(', ') || '–'
+                  : v.jumlah_sisa?.[target] != null ? `${v.jumlah_sisa[target]} kapal` : 'rahasia'})</span></h3>
                 <Grid rows={v.tembakan?.[nm] ?? emptyBoard} label={`Tembakan ${nm}`}
                   highlight={lastShot && lastShot.penembak === nm ? [lastShot.baris, lastShot.kolom] : null} />
               </div>
@@ -173,9 +200,15 @@ export function RKapal({ view, names, me, canAct, acted, act, replay, events }: 
       {(v.riwayat?.length ?? 0) > 0 && (
         <div className="act-log">
           {v.riwayat.slice(-12).reverse().map((r: any, k: number) => (
-            <span key={k} className={`chip shot-${r.hasil}`}>
-              <NameChip name={r.penembak} idx={idxOf(names, r.penembak)} /> ({r.baris},{r.kolom}) {r.hasil}{r.ukuran ? ` ${r.ukuran}` : ''}
-            </span>
+            r.sonar ? (
+              <span key={k} className="chip shot-sonar">
+                <NameChip name={r.penembak} idx={idxOf(names, r.penembak)} /> 📡 ({r.sonar[0]},{r.sonar[1]}): {r.jumlah} petak kapal
+              </span>
+            ) : (
+              <span key={k} className={`chip shot-${r.hasil}`}>
+                <NameChip name={r.penembak} idx={idxOf(names, r.penembak)} /> ({r.baris},{r.kolom}) {r.hasil === 'ranjau' ? '💥 ranjau!' : r.hasil}{r.ukuran ? ` ${r.ukuran}` : ''}
+              </span>
+            )
           ))}
         </div>
       )}

@@ -23,9 +23,19 @@ KARTU: dict[str, dict[str, Any]] = {
     "pukulan_tenaga": {"nama": "Pukulan Tenaga Dalam", "biaya": 2, "serang": 11, "lemah": 2, "ket": "Serang 11, musuh lemah 2 giliran."},
     "angin_puyuh": {"nama": "Angin Puyuh", "biaya": 1, "serang_semua": 5, "ket": "Serang 5 ke semua musuh."},
     "kuda_kuda": {"nama": "Kuda-kuda", "biaya": 1, "blok": 4, "tarik": 1, "ket": "Blok 4, ambil 1 kartu."},
+    "kutukan": {"nama": "Kutukan", "biaya": 9, "kutukan": True,
+                "ket": "Tidak bisa dimainkan, hanya memenuhi tangan. Bisa dibuang di tempat istirahat."},
 }
 DEK_AWAL = ["tebas"] * 5 + ["tangkis"] * 4 + ["silat"]
-HADIAH = [k for k in KARTU if k not in ("tebas", "tangkis")]
+HADIAH = [k for k in KARTU if k not in ("tebas", "tangkis", "kutukan")]
+# berkah: satu diundi dari seed per match, sama untuk semua pemain
+BERKAH = {
+    "keris": "Keris Pusaka: kuat +1 di setiap pertarungan",
+    "jimat": "Jimat Penjaga: HP maksimal +15",
+    "kantong": "Kantong Ajaib: ambil 6 kartu tiap giliran (bukan 5)",
+    "kebal": "Ilmu Kebal: mulai setiap pertarungan dengan blok 6",
+    "rezeki": "Rezeki Nomplok: hadiah selalu 4 pilihan kartu",
+}
 
 MUSUH: dict[str, dict[str, Any]] = {
     "kera": {"nama": "Kera Hutan", "hp": 22, "pola": [{"serang": 6}, {"serang": 4, "blok": 4}, {"serang": 7}]},
@@ -70,6 +80,20 @@ class KartuNusantara(Game):
     settings = [
         Setting("hp", "HP awal", "int", 70, 20, 200),
         Setting("energi", "Energi per giliran", "int", 3, 2, 5),
+        Setting("niat_musuh", "Niat musuh", "pilihan", "terlihat", grup="informasi",
+                pilihan=[["terlihat", "Terlihat lengkap (angka serangan dll.)"], ["jenis", "Hanya jenisnya (menyerang/bertahan/mengutuk)"],
+                         ["rahasia", "Rahasia (?)"]],
+                ket="Tanpa angka niat, kamu harus menebak kapan perlu blok."),
+        Setting("kesulitan", "Tingkat kesulitan", "int", 0, 0, 5, grup="aturan", ket="Setiap tingkat: HP & serangan musuh +15%."),
+        Setting("berkah", "Berkah awal", "bool", False, grup="kejutan",
+                ket="Semua pemain mendapat satu berkah yang sama (diundi): kuat +1, HP +15, ambil 6 kartu, blok awal 6, atau 4 pilihan hadiah."),
+        Setting("kutukan", "Kartu kutukan di dek awal", "int", 0, 0, 3, grup="kejutan",
+                ket="Kartu kutukan tidak bisa dimainkan dan hanya memenuhi tangan. Bisa dibuang di tempat istirahat."),
+    ]
+    presets = [
+        {"id": "kabut", "nama": "Kabut", "ket": "Niat musuh hanya terlihat jenisnya.", "nilai": {"niat_musuh": "jenis"}},
+        {"id": "kacau", "nama": "Kacau", "ket": "Berkah acak, 2 kartu kutukan, dan musuh lebih kuat.",
+         "nilai": {"berkah": True, "kutukan": 2, "kesulitan": 2}},
     ]
     aturan = f"""
 - Setiap pemain menempuh **{LANTAI} lantai** sendiri-sendiri, dengan **musuh dan pilihan hadiah yang sama** untuk semua (seed sama). Tidak saling menunggu.
@@ -83,6 +107,8 @@ class KartuNusantara(Game):
 - Menang pertarungan → pilih 1 dari 3 kartu hadiah (atau lewati) untuk ditambahkan ke dek.
 - Pertarungan yang terlalu lama (lebih dari {MARAH_MULAI} giliran) membuat musuh mengamuk: kuat +2 setiap giliran.
 - **Skor** = lantai yang diselesaikan × 100 + sisa HP (kalau masih hidup) + 500 kalau bos kalah. Seri: yang memakai giliran lebih sedikit menang.
+- Opsi host: **niat musuh** (terlihat / hanya jenisnya / rahasia), **tingkat kesulitan** (+15% HP & serangan musuh per tingkat),
+  **berkah awal** (satu berkah acak yang sama untuk semua), **kartu kutukan** di dek awal.
 """
     format_aksi = """Tergantung `info()["fase"]`:
 - `"tarung"`: `{"main": i, "target": j}` memainkan kartu ke-`i` di tangan (mulai 0) ke musuh ke-`j` (target boleh dihilangkan → musuh hidup pertama), atau `"akhiri"` untuk mengakhiri giliran.
@@ -99,13 +125,15 @@ class KartuNusantara(Game):
   "skor": 240, "pemain": {"Budi": {"lantai": 3, "hp": 52, "fase": "tarung", "skor": 240}, ...},
   "katalog": {"tebas": {"id": "tebas", "nama": "Tebas", "biaya": 1, "serang": 6, "ket": "Serang 6."}, ...} }
 ```
-`niat.serang` sudah termasuk kuat & lemah musuh (belum dikurangi blokmu)."""
+`niat.serang` sudah termasuk kuat & lemah musuh (belum dikurangi blokmu).
+Kalau niat musuh hanya terlihat jenisnya, `niat` berisi `{"jenis": "serang" | "bertahan" | "kutuk"}`; kalau rahasia, `niat` = `{}`.
+`berkah` = berkah match ini (atau None). Kartu `kutukan` tidak bisa dimainkan."""
     lib_docs = [
         {"nama": "kartu", "jenis": "fungsi", "tanda": "kartu(id)", "ket": "Detail kartu: {'nama', 'biaya', 'serang', 'blok', 'racun', ...}."},
         {"nama": "bisa_main", "jenis": "fungsi", "tanda": "bisa_main(i)", "ket": "True kalau kartu ke-i di tangan bisa dimainkan (energi cukup)."},
         {"nama": "musuh_hidup", "jenis": "fungsi", "tanda": "musuh_hidup()", "ket": "Indeks musuh yang masih hidup."},
         {"nama": "musuh_terlemah", "jenis": "fungsi", "tanda": "musuh_terlemah()", "ket": "Indeks musuh hidup dengan HP + blok paling kecil (atau -1)."},
-        {"nama": "perkiraan_serangan", "jenis": "fungsi", "tanda": "perkiraan_serangan()", "ket": "Total kerusakan yang akan dilakukan musuh giliran ini (sebelum dikurangi blokmu)."},
+        {"nama": "perkiraan_serangan", "jenis": "fungsi", "tanda": "perkiraan_serangan()", "ket": "Total kerusakan yang akan dilakukan musuh giliran ini (sebelum dikurangi blokmu). Kalau niat musuh disembunyikan: perkiraan terburuk dari pola serangan musuh."},
         {"nama": "daftar_kartu", "jenis": "fungsi", "tanda": "daftar_kartu()", "ket": "Semua kartu di game ini (dict id → detail)."},
     ]
     templates = [
@@ -185,7 +213,9 @@ class KartuNusantara(Game):
 
     # ------------------------------------------------------------ run per pemain
     def _new_run(self, s):
-        return {"hp": s["cfg"]["hp"], "hp_maks": s["cfg"]["hp"], "lantai": 1, "fase": "tarung", "dek": list(DEK_AWAL),
+        hp = s["cfg"]["hp"] + (15 if s.get("berkah") == "jimat" else 0)
+        return {"hp": hp, "hp_maks": hp, "lantai": 1, "fase": "tarung", "kesulitan": s["cfg"].get("kesulitan", 0),
+                "dek": list(DEK_AWAL) + ["kutukan"] * s["cfg"].get("kutukan", 0),
                 "tarik": [], "buang": [], "tangan": [], "habis": [], "energi": 0, "blok": 0, "kuat": 0, "racun": 0, "lemah": 0,
                 "musuh": [], "giliran": 0, "kocok_no": 0, "pilihan": [], "log": [], "selesai_lantai": 0, "menang": False,
                 "total_giliran": 0, "aksi": 0, "main_giliran": 0, "mati": False}
@@ -203,6 +233,7 @@ class KartuNusantara(Game):
         for idx, mid in enumerate(plan):
             d = MUSUH[mid]
             hp = d["hp"] if mid == "raksasa" else int(round(d["hp"] * (1 + 0.04 * (lantai - 1))))
+            hp = int(round(hp * (1 + 0.15 * s["cfg"].get("kesulitan", 0))))
             out.append({"id": mid, "nama": d["nama"], "hp": hp, "hp_maks": hp, "blok": 0, "kuat": 0, "racun": 0, "lemah": 0,
                         "pola": rng(s, "pola", lantai, idx).randrange(len(d["pola"])), "hidup": True})
         return out
@@ -212,7 +243,7 @@ class KartuNusantara(Game):
         base = d["pola"][(m["pola"] + run["giliran"] - 1) % len(d["pola"])]
         n = dict(base)
         if n.get("serang"):
-            dmg = n["serang"] + m["kuat"]
+            dmg = int(round(n["serang"] * (1 + 0.15 * run.get("kesulitan", 0)))) + m["kuat"]
             if m["lemah"] > 0:
                 dmg = dmg * 3 // 4
             n["serang"] = max(0, dmg)
@@ -243,6 +274,8 @@ class KartuNusantara(Game):
         rng(s, "dek", run["lantai"]).shuffle(run["tarik"])
         run["buang"], run["tangan"], run["habis"] = [], [], []
         run["kuat"] = run["racun"] = run["lemah"] = run["blok"] = 0
+        if s.get("berkah") == "keris":
+            run["kuat"] = 1
         run["giliran"] = 0
         run["kocok_no"] = 0
         self._log(run, f"Lantai {run['lantai']}: " + ", ".join(m["nama"] for m in run["musuh"]))
@@ -267,7 +300,9 @@ class KartuNusantara(Game):
         for m in run["musuh"]:
             m["niat"] = self._intent(run, m) if m["hidup"] else {}
         run["energi"] = s["cfg"]["energi"]
-        self._draw(s, run, TARIK)
+        if run["giliran"] == 1 and s.get("berkah") == "kebal":
+            run["blok"] += 6
+        self._draw(s, run, TARIK + (1 if s.get("berkah") == "kantong" else 0))
 
     def _die(self, run):
         run["hp"] = 0
@@ -334,7 +369,7 @@ class KartuNusantara(Game):
             run["hp"] += 6
             self._log(run, "Pusaka elit: HP maksimal +6")
         g = rng(s, "hadiah", run["lantai"])
-        run["pilihan"] = g.sample(HADIAH, 3)
+        run["pilihan"] = g.sample(HADIAH, 4 if s.get("berkah") == "rezeki" else 3)
         run["fase"] = "hadiah"
         run["tangan"], run["tarik"], run["buang"], run["habis"] = [], [], [], []
         run["blok"] = run["kuat"] = run["racun"] = run["lemah"] = 0
@@ -354,6 +389,7 @@ class KartuNusantara(Game):
     # ------------------------------------------------------------ kontrak Game
     def init(self, cfg, names, seed):
         s = {"seed": seed, "names": names, "cfg": cfg, "runs": []}
+        s["berkah"] = rng(s, "berkah").choice(sorted(BERKAH)) if cfg.get("berkah") else None
         for _ in names:
             run = self._new_run(s)
             self._start_combat(s, run)
@@ -370,15 +406,32 @@ class KartuNusantara(Game):
                 "log": run["log"][-2:]}
 
     def public(self, s):
-        return {"lantai_total": LANTAI, "pemain": {s["names"][i]: self._summary(r) for i, r in enumerate(s["runs"])}}
+        return {"lantai_total": LANTAI, "pemain": {s["names"][i]: self._summary(r) for i, r in enumerate(s["runs"])},
+                "berkah": s.get("berkah"), "berkah_teks": BERKAH.get(s.get("berkah") or ""), "niat_musuh": s["cfg"].get("niat_musuh", "terlihat"),
+                "kesulitan": s["cfg"].get("kesulitan", 0)}
 
-    def observe(self, s, p):
+    @staticmethod
+    def _intent_kind(n):
+        if n.get("serang"):
+            return "serang"
+        if n.get("blok") or n.get("kuat"):
+            return "bertahan"
+        return "kutuk"
+
+    def observe(self, s, p, fog=True):
         run = s["runs"][p]
+        mode = s["cfg"].get("niat_musuh", "terlihat") if fog else "terlihat"
         musuh = []
         for m in run["musuh"]:
             niat = m.get("niat", {}) if m["hidup"] else {}
+            teks = _intent_text(niat)
+            if niat and mode == "jenis":
+                k = self._intent_kind(niat)
+                niat, teks = {"jenis": k}, {"serang": "akan menyerang", "bertahan": "akan bertahan", "kutuk": "akan mengutuk"}[k]
+            elif niat and mode == "rahasia":
+                niat, teks = {}, "?"
             musuh.append({"nama": m["nama"], "id": m["id"], "hp": m["hp"], "hp_maks": m["hp_maks"], "blok": m["blok"], "kuat": m["kuat"],
-                          "racun": m["racun"], "lemah": m["lemah"], "hidup": m["hidup"], "niat": niat, "niat_teks": _intent_text(niat)})
+                          "racun": m["racun"], "lemah": m["lemah"], "hidup": m["hidup"], "niat": niat, "niat_teks": teks})
         return {**self.public(s), "saya": p, "nama_saya": s["names"][p], "fase": run["fase"], "lantai": run["lantai"],
                 "hp": run["hp"], "hp_maks": run["hp_maks"], "energi": run["energi"], "blok": run["blok"], "kuat": run["kuat"],
                 "racun": run["racun"], "lemah": run["lemah"], "giliran": run["giliran"], "tangan": list(run["tangan"]),
@@ -400,6 +453,8 @@ class KartuNusantara(Game):
             if not 0 <= i < len(run["tangan"]):
                 raise ActionError(f"tidak ada kartu ke-{i} di tangan (ada {len(run['tangan'])} kartu)")
             card = KARTU[run["tangan"][i]]
+            if card.get("kutukan"):
+                raise ActionError("kartu kutukan tidak bisa dimainkan")
             if card["biaya"] > run["energi"]:
                 raise ActionError(f"energi kurang untuk {card['nama']} (butuh {card['biaya']}, sisa {run['energi']})")
             alive = [k for k, m in enumerate(run["musuh"]) if m["hidup"]]
@@ -539,6 +594,9 @@ class KartuNusantara(Game):
     def reveal(self, s):
         return {"dek_akhir": {s["names"][i]: r["dek"] for i, r in enumerate(s["runs"])}}
 
+    def full_view(self, s):
+        return self.public(s)
+
     # ------------------------------------------------------------ library bot
     def bot_library(self, s, p, obs):
         run = s["runs"][p]
@@ -561,12 +619,29 @@ class KartuNusantara(Game):
                 return -1
             return min(alive, key=lambda k: (run["musuh"][k]["hp"] + run["musuh"][k]["blok"], k))
 
+        mode = s["cfg"].get("niat_musuh", "terlihat")
+        seen = {k: m["niat"] for k, m in enumerate(obs.get("musuh", []))}
+
+        def worst(m):
+            """Serangan terbesar dari pola musuh ini (tanpa melihat niat sekarang)."""
+            best = 0
+            for pat in MUSUH[m["id"]]["pola"]:
+                if pat.get("serang"):
+                    dmg = int(round(pat["serang"] * (1 + 0.15 * run.get("kesulitan", 0)))) + m["kuat"]
+                    best = max(best, (dmg * 3 // 4 if m["lemah"] > 0 else dmg) * pat.get("kali", 1))
+            return best
+
         def perkiraan_serangan():
             total = 0
-            for m in run["musuh"]:
-                n = m.get("niat") or {}
-                if m["hidup"] and n.get("serang"):
-                    total += n["serang"] * n.get("kali", 1)
+            for k, m in enumerate(run["musuh"]):
+                if not m["hidup"]:
+                    continue
+                n = seen.get(k) or {}
+                if mode == "terlihat":
+                    if n.get("serang"):
+                        total += n["serang"] * n.get("kali", 1)
+                elif mode == "rahasia" or n.get("jenis") == "serang":
+                    total += worst(m)
             return total
 
         return {"kartu": kartu, "bisa_main": bisa_main, "musuh_hidup": musuh_hidup, "musuh_terlemah": musuh_terlemah,

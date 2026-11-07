@@ -18,9 +18,13 @@ from .base import ActionError, Game, Setting, as_int, rng
 RANKS = "23456789TJQKA"
 SUITS = "shdc"
 DECK = [r + s for r in RANKS for s in SUITS]
+DECK_SHORT = [c for c in DECK if c[0] not in "2345"]     # Short Deck (6+): 36 kartu
 RV = {r: i + 2 for i, r in enumerate(RANKS)}
 KATEGORI = ["Kartu Tinggi", "Satu Pasang", "Dua Pasang", "Tiga Sejenis", "Straight", "Flush", "Full House",
             "Empat Sejenis", "Straight Flush"]
+# Short Deck: flush lebih kuat dari full house (kartu lebih sedikit, flush lebih jarang)
+KATEGORI_SHORT = ["Kartu Tinggi", "Satu Pasang", "Dua Pasang", "Tiga Sejenis", "Straight", "Full House", "Flush",
+                  "Empat Sejenis", "Straight Flush"]
 STREETS = ["preflop", "flop", "turn", "river"]
 ALIAS = {"fold": "fold", "lipat": "fold", "check": "check", "cek": "check", "call": "call", "ikut": "call",
          "raise": "raise", "naik": "raise", "bet": "raise", "allin": "allin", "all-in": "allin", "all_in": "allin"}
@@ -28,9 +32,9 @@ CONTOH_AKSI = "'fold', 'check', 'call', 'allin', atau {'aksi': 'raise', 'ke': ju
 
 
 # ---------------------------------------------------------------- evaluator
-def _straight(rs: set[int]) -> int:
+def _straight(rs: set[int], short: bool = False) -> int:
     if 14 in rs:
-        rs = rs | {1}
+        rs = rs | {5 if short else 1}      # Short Deck: A-6-7-8-9 adalah straight terendah
     run = 0
     for v in range(14, 0, -1):
         run = run + 1 if v in rs else 0
@@ -39,15 +43,16 @@ def _straight(rs: set[int]) -> int:
     return 0
 
 
-def evaluate(cards: list[str]) -> tuple[int, ...]:
-    """Nilai tangan terbaik dari 2–7 kartu. Tuple lebih besar = tangan lebih kuat."""
+def evaluate(cards: list[str], short: bool = False) -> tuple[int, ...]:
+    """Nilai tangan terbaik dari 2–7 kartu. Tuple lebih besar = tangan lebih kuat. ``short``: aturan Short Deck
+    (flush mengalahkan full house, A-6-7-8-9 straight)."""
     ranks = sorted((RV[c[0]] for c in cards), reverse=True)
     suits: dict[str, list[int]] = {}
     for c in cards:
         suits.setdefault(c[1], []).append(RV[c[0]])
     flush = next((sorted(v, reverse=True) for v in suits.values() if len(v) >= 5), None)
     if flush:
-        sf = _straight(set(flush))
+        sf = _straight(set(flush), short)
         if sf:
             return (8, sf)
     cnt = Counter(ranks)
@@ -57,12 +62,14 @@ def evaluate(cards: list[str]) -> tuple[int, ...]:
     if quads:
         q = quads[0]
         return (7, q, max((r for r in ranks if r != q), default=0))
+    if short and flush:
+        return (6, *flush[:5])
     if trips and (len(trips) > 1 or pairs):
         t = trips[0]
-        return (6, t, max(trips[1:] + pairs))
+        return (5 if short else 6, t, max(trips[1:] + pairs))
     if flush:
         return (5, *flush[:5])
-    st = _straight(set(ranks))
+    st = _straight(set(ranks), short)
     if st:
         return (4, st)
     if trips:
@@ -77,10 +84,10 @@ def evaluate(cards: list[str]) -> tuple[int, ...]:
     return (0, *ranks[:5])
 
 
-def hand_name(v: tuple[int, ...]) -> str:
+def hand_name(v: tuple[int, ...], short: bool = False) -> str:
     if v[0] == 8 and v[1] == 14:
         return "Royal Flush"
-    return KATEGORI[v[0]]
+    return (KATEGORI_SHORT if short else KATEGORI)[v[0]]
 
 
 def preflop_strength(hole: list[str]) -> float:
@@ -100,20 +107,20 @@ def preflop_strength(hole: list[str]) -> float:
 
 
 @lru_cache(maxsize=8192)
-def equity(hole: tuple[str, ...], board: tuple[str, ...], opp: int, samples: int) -> float:
+def equity(hole: tuple[str, ...], board: tuple[str, ...], opp: int, samples: int, short: bool = False) -> float:
     """Peluang menang melawan ``opp`` tangan acak (Monte Carlo dengan seed dari kartu yang terlihat,
     jadi hasilnya selalu sama untuk input yang sama)."""
-    raw = f"{','.join(hole)}|{','.join(board)}|{opp}|{samples}"
+    raw = f"{','.join(hole)}|{','.join(board)}|{opp}|{samples}" + ("|short" if short else "")
     g = random.Random(int(hashlib.sha256(raw.encode()).hexdigest()[:16], 16))
     used = set(hole) | set(board)
-    rest = [c for c in DECK if c not in used]
+    rest = [c for c in (DECK_SHORT if short else DECK) if c not in used]
     need = 5 - len(board)
     score = 0.0
     for _ in range(samples):
         draw = g.sample(rest, need + 2 * opp)
         full = list(board) + draw[:need]
-        mine = evaluate(list(hole) + full)
-        best = max(evaluate(draw[need + 2 * k: need + 2 * k + 2] + full) for k in range(opp))
+        mine = evaluate(list(hole) + full, short)
+        best = max(evaluate(draw[need + 2 * k: need + 2 * k + 2] + full, short) for k in range(opp))
         if mine > best:
             score += 1
         elif mine == best:
@@ -137,12 +144,26 @@ class Poker(Game):
     min_pemain, max_pemain = 2, 8
     hint_aksi = CONTOH_AKSI
     timer = 25
+    jeda_pada, jeda_hasil = ("tangan_selesai",), 4
     label_skor = "Chip"
     settings = [
         Setting("chip", "Chip awal", "int", 1000, 100, 100000),
         Setting("sb", "Small blind awal", "int", 10, 1, 10000, ket="Big blind = 2 × small blind."),
         Setting("naik_tiap", "Blind naik tiap (tangan)", "int", 10, 0, 100, ket="Blind dikali 1,5 setiap sekian tangan. 0 = tetap."),
         Setting("tangan_maks", "Batas tangan", "int", 40, 1, 300, ket="Berhenti setelah sekian tangan; peringkat menurut chip."),
+        Setting("chip_samar", "Chip lawan samar", "bool", False, grup="informasi",
+                ket="Tumpukan chip lawan hanya terlihat dibulatkan (kelipatan 5 big blind). Taruhan & pot tetap pasti."),
+        Setting("ante", "Ante (% big blind)", "int", 0, 0, 100, grup="aturan",
+                ket="Setiap tangan semua pemain memasang ante ke pot sebelum blind. Pot lebih besar, permainan lebih berani."),
+        Setting("bounty", "Bounty per pemain disingkirkan", "int", 0, 0, 100000, grup="aturan",
+                ket="Menyingkirkan pemain menambah skor sebesar ini (skor = chip + bounty). Diberikan ke pemenang pot terbesar di tangan itu."),
+        Setting("short_deck", "Short Deck (6+)", "bool", False, grup="kejutan",
+                ket="Kartu 2–5 dibuang (36 kartu). Flush mengalahkan full house, dan A-6-7-8-9 adalah straight."),
+    ]
+    presets = [
+        {"id": "kabut", "nama": "Kabut", "ket": "Chip lawan hanya terlihat kira-kira.", "nilai": {"chip_samar": True}},
+        {"id": "kacau", "nama": "Kacau", "ket": "Short Deck, ante 25%, dan bounty 300 per pemain yang disingkirkan.",
+         "nilai": {"short_deck": True, "ante": 25, "bounty": 300}},
     ]
     aturan = """
 - Setiap pemain mulai dengan chip yang sama. Tiap **tangan**, semua mendapat 2 kartu tertutup; 5 kartu meja dibuka bertahap
@@ -157,6 +178,8 @@ class Poker(Game):
   atau batas tangan tercapai; peringkat menurut chip (yang tersingkir belakangan lebih tinggi).
 - **Keadilan dek:** hash seed (`hash_dek`) diumumkan dari awal; seed dibuka di layar hasil supaya bisa dicek ulang.
 - Waktu habis = check kalau bisa, kalau tidak fold.
+- Opsi host: **chip lawan samar** (dibulatkan), **ante** (% big blind, dipasang semua pemain tiap tangan), **bounty** (skor tambahan
+  untuk tiap pemain yang kamu singkirkan), dan **Short Deck** (kartu 6–A saja; flush > full house; A-6-7-8-9 straight).
 """
     format_aksi = """Salah satu:
 - `"fold"`, `"check"`, `"call"`, `"allin"` (boleh juga `"lipat"`, `"cek"`, `"ikut"`)
@@ -174,8 +197,10 @@ class Poker(Game):
   "pot": 180, "taruhan_tertinggi": 40, "untuk_ikut": 20, "min_raise_ke": 60, "maks_raise_ke": 990,
   "aksi_valid": ["fold", "call", "raise", "allin"], "giliran": "Budi",
   "aksi_tangan": [ {"pemain": "Ani", "aksi": "raise", "jumlah": 40, "ke": 40, "jalan": "preflop"} ],
-  "riwayat": [ {"no": 2, "meja": [...], "pot": 300, "menang": {"Ani": 300}, "showdown": {"Ani": {"kartu": [...], "tangan": "Flush"}}, "aksi": [...]} ] }
-```"""
+  "riwayat": [ {"no": 2, "meja": [...], "pot": 300, "menang": {"Ani": 300}, "showdown": {"Ani": {"kartu": [...], "tangan": "Flush"}}, "aksi": [...]} ],
+  "chip_samar": False, "ante": 0, "short_deck": False, "bounty": 0, "bounty_dapat": {"Budi": 1, ...} }
+```
+Kalau `chip_samar` True, `chip` lawan dibulatkan ke kelipatan 5 big blind (chipmu sendiri pasti)."""
     lib_docs = [
         {"nama": "kartu_saya", "jenis": "fungsi", "tanda": "kartu_saya()", "ket": "Dua kartu tertutupmu, misalnya ['As', 'Kd']."},
         {"nama": "meja", "jenis": "fungsi", "tanda": "meja()", "ket": "Kartu meja yang sudah terbuka (0, 3, 4, atau 5 kartu)."},
@@ -290,7 +315,7 @@ class Poker(Game):
     def init(self, cfg, names, seed):
         n = len(names)
         s = {"seed": seed, "names": names, "cfg": cfg, "chips": [cfg["chip"]] * n, "tangan": 0, "dealer": 0,
-             "riwayat": [], "elim": {}, "selesai": False, "h": None, "arsip": [],
+             "riwayat": [], "elim": {}, "selesai": False, "h": None, "arsip": [], "bounty": [0] * n,
              "hash": hashlib.sha256(f"poker|{seed}".encode()).hexdigest()[:16]}
         s["dealer"] = rng(s, "dealer").randrange(n)
         self._start_hand(s, first=True)
@@ -308,7 +333,7 @@ class Poker(Game):
         if not first or s["chips"][s["dealer"]] <= 0:
             s["dealer"] = self._next(s, s["dealer"], lambda j: s["chips"][j] > 0)
         d = s["dealer"]
-        deck = DECK[:]
+        deck = (DECK_SHORT if s["cfg"].get("short_deck") else DECK)[:]
         rng(s, "dek", s["tangan"]).shuffle(deck)
         h = {"deck": deck, "hole": [None] * n, "board": [], "street": "preflop", "bet": [0] * n, "total": [0] * n,
              "folded": [j not in alive for j in range(n)], "allin": [False] * n, "acted": [False] * n,
@@ -318,6 +343,15 @@ class Poker(Game):
         for j in alive:
             h["hole"][j] = [deck.pop(), deck.pop()]
         sb, bb = self._blinds(s)
+        ante = bb * s["cfg"].get("ante", 0) // 100
+        if ante > 0:
+            for j in alive:
+                got = min(ante, s["chips"][j])
+                s["chips"][j] -= got
+                h["total"][j] += got
+                if s["chips"][j] == 0:
+                    h["allin"][j] = True
+                h["log"].append({"pemain": s["names"][j], "aksi": "ante", "jumlah": got, "ke": 0, "jalan": "preflop"})
         if len(alive) == 2:
             sbp = d
             bbp = self._next(s, d, lambda j: j in alive)
@@ -382,8 +416,9 @@ class Poker(Game):
         else:
             while h["street"] != "river":
                 ev += self._deal_street(s)
-            vals = {j: evaluate(h["hole"][j] + h["board"]) for j in cont}
-            showdown = {names[j]: {"kartu": h["hole"][j], "tangan": hand_name(vals[j])} for j in cont}
+            short = bool(s["cfg"].get("short_deck"))
+            vals = {j: evaluate(h["hole"][j] + h["board"], short) for j in cont}
+            showdown = {names[j]: {"kartu": h["hole"][j], "tangan": hand_name(vals[j], short)} for j in cont}
             prev = 0
             for lv in sorted({h["total"][j] for j in range(n) if h["total"][j] > 0}):
                 pot = sum(min(h["total"][j], lv) - min(h["total"][j], prev) for j in range(n))
@@ -409,10 +444,13 @@ class Poker(Game):
         if len(s["riwayat"]) > 12:
             del s["riwayat"][0]
         out = []
+        top = max(range(n), key=lambda j: (won[j], -order.index(j)))
         for j in h["in"]:
             if s["chips"][j] == 0 and str(j) not in s["elim"]:
                 s["elim"][str(j)] = s["tangan"] * 10**7 + h["start_chips"][j]
                 out.append(names[j])
+                if s["cfg"].get("bounty", 0) > 0 and won[top] > 0 and top != j:
+                    s["bounty"][top] += 1
         h["to_act"] = None
         ev.append({"jenis": "tangan_selesai", "no": s["tangan"], "pot": total, "menang": entry["menang"],
                    "showdown": showdown, "meja": list(h["board"]), "tersingkir": out})
@@ -471,13 +509,22 @@ class Poker(Game):
         lo = min(hi, h["cur"] + max(h["min_raise"], 1))
         return lo, hi
 
-    def public(self, s):
+    def _samar(self, s, c):
+        unit = max(1, 5 * self._blinds(s)[1])
+        return 0 if c <= 0 else max(unit, int(round(c / unit)) * unit)
+
+    def _view(self, s, viewer):
         names, n = s["names"], len(s["names"])
         sb, bb = self._blinds(s)
         h = s["h"]
-        out = {"tangan": s["tangan"], "tangan_maks": s["cfg"]["tangan_maks"], "sb": sb, "bb": bb,
-               "chip": dict(zip(names, s["chips"])), "dealer": names[s["dealer"]], "hash_dek": s["hash"],
-               "riwayat": s["riwayat"][-8:], "jalan": "selesai" if s["selesai"] else (h["street"] if h else "preflop")}
+        cfg = s["cfg"]
+        samar = cfg.get("chip_samar") and viewer != "semua"
+        chip = {names[j]: (c if not samar or viewer == j else self._samar(s, c)) for j, c in enumerate(s["chips"])}
+        out = {"tangan": s["tangan"], "tangan_maks": cfg["tangan_maks"], "sb": sb, "bb": bb,
+               "chip": chip, "dealer": names[s["dealer"]], "hash_dek": s["hash"],
+               "riwayat": s["riwayat"][-8:], "jalan": "selesai" if s["selesai"] else (h["street"] if h else "preflop"),
+               "chip_samar": bool(cfg.get("chip_samar")), "ante": cfg.get("ante", 0), "short_deck": bool(cfg.get("short_deck")),
+               "bounty": cfg.get("bounty", 0), "bounty_dapat": dict(zip(names, s.get("bounty", [0] * n)))}
         if h is None:
             return {**out, "meja": [], "pot": 0, "taruhan": {}, "masuk": {}, "status": {}, "giliran": None,
                     "taruhan_tertinggi": 0, "aksi_tangan": []}
@@ -494,8 +541,14 @@ class Poker(Game):
         })
         return out
 
+    def public(self, s):
+        return self._view(s, None)
+
+    def full_view(self, s):
+        return self._view(s, "semua")
+
     def observe(self, s, p):
-        o = self.public(s)
+        o = self._view(s, p)
         h = s["h"]
         hole = list(h["hole"][p] or []) if h else []
         owe = max(0, min(h["cur"] - h["bet"][p], s["chips"][p])) if h else 0
@@ -576,7 +629,14 @@ class Poker(Game):
         return s["selesai"]
 
     def scores(self, s):
-        return [float(c) for c in s["chips"]]
+        b = s["cfg"].get("bounty", 0)
+        return [float(c + b * s.get("bounty", [0] * len(s["chips"]))[i]) for i, c in enumerate(s["chips"])]
+
+    def result(self, s):
+        out = super().result(s)
+        if s["cfg"].get("bounty", 0) > 0:
+            out["label_skor"] = "Chip + bounty"
+        return out
 
     def tiebreak(self, s):
         return [float(10**12) if c > 0 else float(s["elim"].get(str(i), 0)) for i, c in enumerate(s["chips"])]
@@ -592,12 +652,14 @@ class Poker(Game):
         board = list(h["board"]) if h else []
         opp = max(1, len([j for j in self._contenders(s) if j != p])) if h else 1
 
+        short = bool(s["cfg"].get("short_deck"))
+
         def nilai_tangan(kartu=None):
             cs = hole + board if kartu is None else _cards(kartu)
             if len(cs) < 1:
                 raise ActionError("butuh minimal 1 kartu")
-            v = evaluate(cs)
-            return {"kategori": v[0], "nama": hand_name(v), "skor": list(v)}
+            v = evaluate(cs, short)
+            return {"kategori": v[0], "nama": hand_name(v, short), "skor": list(v)}
 
         def kekuatan_awal(kartu=None):
             cs = hole if kartu is None else _cards(kartu)
@@ -609,7 +671,7 @@ class Poker(Game):
             if len(hole) != 2:
                 return 0.0
             k = max(20, min(400, as_int(sampel, "sampel")))
-            return round(equity(tuple(hole), tuple(board), min(opp, 7), k), 4)
+            return round(equity(tuple(hole), tuple(board), min(opp, 7), k, short), 4)
 
         def untuk_ikut():
             return obs["untuk_ikut"]

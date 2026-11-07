@@ -14,6 +14,11 @@ Pemain: 2–8. Fungsi wajib: `def pilih():`.
 - HP 0 = gugur. Yang terakhir hidup menang, atau HP terbanyak saat batas ronde.
 - **Mode event** (diatur host): *Taruhan Ganda* (HP kalah ×2), *Pikun* (ingatan bot 3 ronde), *Kilat* (maks 30 ronde),
   *Darah Tipis* (HP awal 30%), *Kabut* (pilihan tiap pemain tidak terlihat, hanya jumlah per senjata), *Kejutan* (salah satunya diundi).
+- **HP lawan samar** (opsi): HP lawan dibulatkan ke kelipatan 10% HP awal. **Batas ronde rahasia** (opsi): ±25%, tidak diumumkan.
+- **Pemimpin jadi buruan** (opsi): pemain dengan HP tertinggi yang kalah kehilangan HP ekstra, dibagi ke yang mengalahkannya.
+- **Kejutan tiap ronde** (opsi), diumumkan di awal ronde: *Ronde Ganda* (HP kalah ×2), *Ronde Terbalik* (batu kalah dari gunting,
+  gunting kalah dari kertas, kertas kalah dari batu), *Senjata Terlarang* (yang memakainya kehilangan HP kalah, dibagi ke semua yang
+  tidak memakainya; tidak ikut adu senjata ronde itu).
 
 ## Aksi yang dikembalikan
 
@@ -23,7 +28,9 @@ Kembalikan teks `BATU`, `GUNTING`, atau `KERTAS` dari `def pilih():` (sama persi
 
 Bot Suit memakai library Suit Bot Arena: `ronde()`, `hp_saya()`, `lawan()`, `jumlah_terakhir()`, `pilihan_terakhir(nama)`,
 `riwayat()`, `pengalah(s)`, `korban(s)`, `terbanyak(d)`, `hitung_hasil(pilihan)`, `senjata_terbaik()`, dst. `info()` juga tersedia dan berisi
-`ronde`, `ronde_maks`, `hp` (dict nama → HP), dan `riwayat` (ronde-ronde terakhir sebanyak ingatan).
+`ronde`, `ronde_maks` (perkiraan kalau `ronde_pasti` False), `hp` (dict nama → HP; dibulatkan untuk lawan kalau HP samar),
+`riwayat` (ronde-ronde terakhir sebanyak ingatan; `perubahan` lawan None kalau HP samar), `kejutan` (kejutan ronde ini atau None:
+`{"jenis": "ganda" | "terbalik" | "terlarang", "senjata": "batu" (untuk terlarang)}`), dan `pemimpin` (nama yang sedang diburu).
 
 ## Fungsi yang tersedia
 
@@ -68,13 +75,21 @@ Bot Suit memakai library Suit Bot Arena: `ronde()`, `hp_saya()`, `lawan()`, `jum
 
 ## Pengaturan room (diatur host)
 
-| Pengaturan | Default | Keterangan |
-|---|---|---|
-| HP awal | 1000 |  |
-| HP hilang saat kalah | 100 |  |
-| Batas ronde | 40 |  |
-| Ingatan bot (ronde) | 10 |  |
-| Mode event | normal | Variasi aturan: taruhan ganda, pikun, kilat, darah tipis, kabut, atau kejutan acak. |
+Pengaturan **Informasi** menyembunyikan sebagian `info()` (nilainya jadi `None` atau tidak ada) supaya bot dan manusia sama-sama bermain dengan kabut. Tulis bot yang tetap jalan kalau suatu nilai `None`.
+
+| Grup | Pengaturan | Default | Keterangan |
+|---|---|---|---|
+| Dasar | HP awal (`hp_awal`) | 1000 |  |
+| Dasar | HP hilang saat kalah (`hp_kalah`) | 100 |  |
+| Dasar | Batas ronde (`ronde_maks`) | 40 |  |
+| Dasar | Ingatan bot (ronde) (`ingatan`) | 10 |  |
+| Kejutan | Mode event (`event`) | normal | Variasi aturan: taruhan ganda, pikun, kilat, darah tipis, kabut, atau kejutan acak. |
+| Informasi (kabut) | HP lawan samar (`hp_samar`) | False | HP lawan dibulatkan ke kelipatan 10% HP awal, dan perubahan HP lawan tiap ronde tidak terlihat. HP-mu sendiri tetap pasti. |
+| Informasi (kabut) | Batas ronde rahasia (`ronde_rahasia`) | False | Batas ronde sebenarnya acak ±25% dari pengaturan dan tidak diumumkan. |
+| Aturan | Pemimpin jadi buruan (%) (`buruan`) | 0 | Kalau pemain dengan HP tertinggi (satu orang) kalah, ia kehilangan HP ekstra sekian persen dari HP kalah; ekstranya dibagi ke yang mengalahkannya. |
+| Kejutan | Kejutan tiap ronde (%) (`kejutan_ronde`) | 0 | Peluang tiap ronde mendapat kejutan yang diumumkan di awal ronde: Ronde Ganda, Ronde Terbalik, atau Senjata Terlarang (yang memakainya kehilangan HP kalah, dibagi ke semua yang tidak memakainya). |
+
+**Preset:** *Kabut* (hp_samar=True, ronde_rahasia=True, event=kabut); *Kacau* (kejutan_ronde=40, buruan=50)
 
 ## Bahasa bot (sama untuk semua game)
 

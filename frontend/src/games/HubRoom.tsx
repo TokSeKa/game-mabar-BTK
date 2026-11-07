@@ -2,18 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { RoomSocket, type ConnStatus } from '../socket';
 import { getToken } from '../trading/api';
 import { copyText } from '../util';
-import { FrameReplay } from './FrameReplay';
+import { alertsEnabled, beep, buzz, flashTitle, setAlertsEnabled, stopFlash, unlockAudio } from './alerts';
+import { ReplayPanel } from './FrameReplay';
 import { HubBotLog, HubBotPanel, loadBotCode } from './HubBotPanel';
 import {
   clearSession, fmt, saveSession, seatColor,
-  type FinalMsg, type GameMeta, type HubSession, type LobbyMsg, type SeatInfo, type UpdateMsg,
+  type FinalMsg, type GameMeta, type HubSession, type LobbyMsg, type SeatInfo, type SesiRow, type UpdateMsg,
 } from './hubApi';
-import { describeEvent, rendererFor } from './renderers';
+import { describeAction, describeEvent, rendererFor } from './renderers';
 import { Reveal } from './Reveal';
-import { SettingsForm, SettingsSummary } from './SettingsForm';
+import { ActiveRules, SettingsForm, SettingsSummary } from './SettingsForm';
 
 export type HubEntry =
-  | { action: 'buat'; game: string; nama: string; settings: Record<string, any>; waktu: number; jeda: number }
+  | { action: 'buat'; game: string; nama: string; settings: Record<string, any>; waktu: number; jeda: number; jeda_hasil: number }
   | { action: 'gabung'; kode: string; nama: string; tonton: boolean }
   | { action: 'kembali'; session: HubSession };
 
@@ -40,19 +41,29 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
   const [start, setStart] = useState<StartInfo | null>(null);
   const [upd, setUpd] = useState<UpdateMsg | null>(null);
   const [actedStep, setActedStep] = useState(-1);
+  const [sent, setSent] = useState<{ step: number; aksi: unknown } | null>(null);
   const [done, setDone] = useState<{ step: number; seats: number[] }>({ step: -1, seats: [] });
+  const [siap, setSiap] = useState<{ step: number; seats: number[] }>({ step: -1, seats: [] });
   const [log, setLog] = useState<string[]>([]);
   const [final, setFinal] = useState<FinalMsg | null>(null);
   const [showFinal, setShowFinal] = useState(false);
   const [reacts, setReacts] = useState<{ id: number; nama: string; emoji: string; x: number }[]>([]);
+  const [notif, setNotif] = useState(alertsEnabled);
   const sock = useRef<RoomSocket | null>(null);
   const sess = useRef<HubSession | null>(entry.action === 'kembali' ? entry.session : null);
+  /** selisih jam klien − jam server (detik); dari ping/pong dengan koreksi waktu tempuh */
   const offset = useRef(0);
+  const clock = useRef<{ rtt: number; at: number } | null>(null);
   const exitRef = useRef(onExit);
   exitRef.current = onExit;
   const toastRef = useRef(toast);
   toastRef.current = toast;
   const mandiriRef = useRef(false);
+  const ackTimer = useRef<number | undefined>(undefined);
+  const draftTimer = useRef<number | undefined>(undefined);
+  const draftVal = useRef<{ aksi: unknown; step: number } | null>(null);
+  const stepRef = useRef(-1);
+  const takeover = useRef(false);
 
   useEffect(() => {
     const hello = () => {
@@ -60,15 +71,22 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
       const s = sess.current;
       if (s) return { type: 'kembali', kode: s.kode, member_id: s.member_id, token_anggota: s.token, token };
       if (entry.action === 'buat') {
-        return { type: 'buat', game: entry.game, nama: entry.nama, settings: entry.settings, waktu: entry.waktu, jeda: entry.jeda, token };
+        return {
+          type: 'buat', game: entry.game, nama: entry.nama, settings: entry.settings, waktu: entry.waktu, jeda: entry.jeda,
+          jeda_hasil: entry.jeda_hasil, token,
+        };
       }
-      if (entry.action === 'gabung') return { type: 'gabung', kode: entry.kode, nama: entry.nama, tonton: entry.tonton, token };
+      if (entry.action === 'gabung') {
+        return { type: 'gabung', kode: entry.kode, nama: entry.nama, tonton: entry.tonton, ambil_alih: takeover.current, token };
+      }
       return null;
     };
     const leave = (msg?: string) => {
       sock.current?.close();
       exitRef.current(msg);
     };
+    const unlock = () => unlockAudio();
+    window.addEventListener('pointerdown', unlock, { passive: true });
     const onMsg = (m: Record<string, any>) => {
       switch (m.type) {
         case 'masuk': {
@@ -83,28 +101,65 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
           }
           break;
         }
+        case 'pong':
+          if (typeof m.now === 'number' && typeof m.t === 'number') {
+            const rtt = Date.now() - m.t;
+            const c = clock.current;
+            // pakai sampel dengan waktu tempuh terkecil (paling akurat); perbarui berkala kalau jaringan berubah
+            if (rtt >= 0 && (!c || rtt <= c.rtt + 40 || Date.now() - c.at > 30_000)) {
+              clock.current = { rtt, at: Date.now() };
+              offset.current = (Date.now() - rtt / 2) / 1000 - m.now;
+            }
+          }
+          break;
         case 'room':
           setLobby(m as LobbyMsg);
           break;
         case 'mulai':
           setStart(m as StartInfo);
           setUpd(null);
-          setLog([]);
           setShowFinal(false);
           setActedStep(-1);
+          window.clearTimeout(ackTimer.current);
+          // sambung ulang di tengah match juga mengirim 'mulai': log kejadian jangan dihapus
+          if (stepRef.current < 0) setLog([]);
           break;
         case 'update': {
           const u = m as UpdateMsg;
-          offset.current = Date.now() / 1000 - u.now;
+          if (!clock.current) offset.current = Date.now() / 1000 - u.now;
+          stepRef.current = u.step;
           setUpd(u);
-          if (mandiriRef.current) setActedStep(-1);
+          if (mandiriRef.current) {
+            setActedStep(-1);
+            window.clearTimeout(ackTimer.current);
+          }
+          if (u.seat != null && u.acted?.includes(u.seat)) window.clearTimeout(ackTimer.current);
           const lines = (u.events ?? []).map(describeEvent).filter(Boolean) as string[];
           if (lines.length) setLog((prev) => [...lines.reverse(), ...prev].slice(0, 80));
           break;
         }
         case 'aksi_ok':
+          window.clearTimeout(ackTimer.current);
           setActedStep(m.step);
+          setSent({ step: m.step, aksi: m.aksi });
           break;
+        case 'batal_ok':
+          setActedStep(-1);
+          setSent(null);
+          break;
+        case 'batal':
+          setDone((d) => (d.step === m.step ? { step: d.step, seats: d.seats.filter((x) => x !== m.kursi) } : d));
+          break;
+        case 'siap_lanjut':
+          setSiap({ step: stepRef.current, seats: m.siap ?? [] });
+          break;
+        case 'jeda_host':
+          toastRef.current(m.dijeda ? `⏸ Match dijeda oleh ${m.oleh}` : `▶ Match dilanjutkan oleh ${m.oleh}`);
+          break;
+        case 'pindah':
+          // room yang sama dibuka di tab/perangkat lain: sesi tetap disimpan untuk tab itu
+          leave(m.message);
+          return;
         case 'sudah':
           setDone((d) => (d.step === m.step ? { step: d.step, seats: [...d.seats, m.kursi] } : { step: m.step, seats: [m.kursi] }));
           break;
@@ -118,6 +173,9 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
           setFinal(m as FinalMsg);
           setShowFinal(true);
           setStart(null);
+          stepRef.current = -1;
+          window.clearTimeout(ackTimer.current);
+          stopFlash();
           break;
         case 'error':
           if (m.for === 'kembali') {
@@ -126,11 +184,23 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
             leave(m.message);
             return;
           }
+          if (m.for === 'gabung' && m.kode === 'nama_dipakai' && !sess.current && !takeover.current) {
+            // nama itu masih tercatat tersambung (mungkin tab/HP lama yang macet): tawarkan ambil alih kursinya
+            if (window.confirm(`${m.message}\n\nKalau itu kamu sendiri di tab/HP lain, ambil alih kursinya? Koneksi lama akan diputus.`)) {
+              takeover.current = true;
+              const h = hello();
+              if (h) sock.current?.send(h);
+              return;
+            }
+          }
           if ((m.for === 'buat' || m.for === 'gabung') && !sess.current) {
             leave(m.message);
             return;
           }
-          if (m.for === 'aksi') setActedStep(-1);
+          if (m.for === 'aksi') {
+            window.clearTimeout(ackTimer.current);
+            setActedStep(-1);
+          }
           toastRef.current(m.message, true);
           break;
         case 'keluar_ok':
@@ -145,13 +215,55 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
     const s = new RoomSocket(hello, onMsg, setStatus, 'ws/main');
     sock.current = s;
     s.connect();
-    return () => s.close();
+    return () => {
+      window.clearTimeout(ackTimer.current);
+      window.clearTimeout(draftTimer.current);
+      window.removeEventListener('pointerdown', unlock);
+      stopFlash();
+      s.close();
+    };
     // entry tetap selama komponen hidup
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const send = (msg: object) => {
-    if (!sock.current?.send({ ...msg, token: getToken() })) toast('Koneksi terputus, mencoba menyambung lagi…', true);
+    if (!sock.current?.send({ ...msg, token: getToken() })) {
+      toast('Koneksi terputus, mencoba menyambung lagi…', true);
+      sock.current?.wake();
+    }
+  };
+
+  const tagOf = (u: UpdateMsg) => u.versi ?? u.step;
+
+  /** Kirim aksi untuk langkah yang SEDANG tampil. Server menolak kalau langkah itu ternyata sudah lewat. */
+  const act = (a: unknown) => {
+    if (!upd) return;
+    window.clearTimeout(draftTimer.current);
+    draftTimer.current = undefined;
+    if (!sock.current?.send({ type: 'aksi', aksi: a, step: tagOf(upd), token: getToken() })) {
+      toast('Belum tersambung, aksimu belum terkirim. Tunggu "tersambung" lalu kirim lagi.', true);
+      sock.current?.wake();
+      return;
+    }
+    setActedStep(upd.step);
+    window.clearTimeout(ackTimer.current);
+    ackTimer.current = window.setTimeout(() => {
+      setActedStep(-1);
+      toast('Server belum menerima aksimu. Menyambung ulang… kirim lagi kalau masih giliranmu.', true);
+      sock.current?.drop();
+    }, 5000);
+  };
+
+  /** Pilihan yang sedang terlihat di layar (belum dikirim). Server memakainya otomatis kalau waktu habis. */
+  const draft = (a: unknown) => {
+    if (!upd) return;
+    draftVal.current = { aksi: a, step: tagOf(upd) };
+    if (draftTimer.current !== undefined) return;
+    draftTimer.current = window.setTimeout(() => {
+      draftTimer.current = undefined;
+      const d = draftVal.current;
+      if (d) sock.current?.send({ type: 'draf', aksi: d.aksi, step: d.step });
+    }, 200);
   };
 
   const meta = lobby ? games[lobby.game] : undefined;
@@ -175,12 +287,18 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
           <span className="room-code" aria-label="Kode room">{lobby.kode}</span>
           <button type="button" className="btn small" onClick={async () => toast((await copyText(invite)) ? 'Link undangan tersalin.' : invite)}>Salin link undangan</button>
           <span className={`status-pill ${status === 'open' ? 'ok' : 'warn'}`}>{status === 'open' ? 'tersambung' : 'menyambung…'}</span>
+          <button type="button" className="btn small" aria-pressed={notif} title="Getar, bunyi, dan judul tab berkedip saat giliranmu"
+            onClick={() => {
+              unlockAudio();
+              setNotif(!notif);
+              setAlertsEnabled(!notif);
+            }}>{notif ? '🔔' : '🔕'}</button>
           <span className="spacer" />
           <div className="react-bar" role="group" aria-label="Kirim reaksi">
             {EMOJI.map((e) => <button key={e} type="button" onClick={() => send({ type: 'reaksi', emoji: e })} aria-label={`Reaksi ${e}`}>{e}</button>)}
           </div>
           <button type="button" className="btn small danger" onClick={() => {
-            if (lobby.status === 'main' && !window.confirm('Match sedang berjalan. Keluar sekarang? Kursimu akan memakai aksi bawaan.')) return;
+            if (lobby.status === 'main' && !window.confirm('Match sedang berjalan. Keluar sekarang? Kursimu akan memakai aksi bawaan. (Masuk lagi dengan nama yang sama untuk kembali ke kursimu.)')) return;
             if (!sock.current?.send({ type: 'keluar' })) {
               clearSession();
               onExit();
@@ -191,12 +309,11 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
 
       {phase === 'lobby' && <Lobby lobby={lobby} meta={meta} me={me} send={send} />}
       {phase === 'main' && (
-        <Live lobby={lobby} meta={meta} start={start} upd={upd} log={log} actedStep={actedStep} done={done} offset={offset.current}
-          act={(a) => {
-            if (!upd) return;
-            setActedStep(upd.step);
-            send({ type: 'aksi', aksi: a });
-          }} />
+        <Live lobby={lobby} meta={meta} me={me} start={start} upd={upd} log={log} actedStep={actedStep} done={done} offset={offset.current}
+          conn={status} siap={siap} sent={sent} notif={notif} act={act} draft={draft}
+          lanjut={() => upd && send({ type: 'lanjut', step: upd.step })}
+          ubah={() => upd && send({ type: 'batal', step: tagOf(upd) })}
+          pause={() => send({ type: 'jeda_host' })} />
       )}
       {phase === 'hasil' && final && <Results final={final} meta={meta} lobby={lobby} me={me} onBack={() => setShowFinal(false)} />}
 
@@ -224,6 +341,30 @@ function SeatRow({ s, i, lobby, me, onRemove }: { s: SeatInfo; i: number; lobby:
   );
 }
 
+function SesiTable({ rows, isHost, onReset }: { rows: SesiRow[]; isHost: boolean; onReset?: () => void }) {
+  if (!rows.length) return null;
+  return (
+    <div className="panel">
+      <div className="row">
+        <h3>Klasemen sesi</h3>
+        <span className="spacer" />
+        {isHost && onReset && <button type="button" className="btn small" onClick={() => window.confirm('Ulang klasemen sesi dari nol?') && onReset()}>Ulang</button>}
+      </div>
+      <p className="hint">Gabungan semua match di room ini. Poin = jumlah pemain yang kamu kalahkan di tiap match.</p>
+      <div className="table-wrap">
+        <table className="tbl">
+          <thead><tr><th>#</th><th>Pemain</th><th>Poin</th><th>Juara</th><th>Main</th></tr></thead>
+          <tbody>
+            {rows.map((r, k) => (
+              <tr key={r.nama}><td>{k + 1}</td><td>{r.nama}</td><td className="num">{r.poin}</td><td className="num">{r.juara}</td><td className="num">{r.main}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function Lobby({ lobby, meta, me, send }: { lobby: LobbyMsg; meta: GameMeta; me: string | null; send: (m: object) => void }) {
   const isHost = lobby.host_id === me;
   const mySeat = lobby.kursi.find((k) => k.owner === me && k.self) ?? null;
@@ -231,19 +372,25 @@ function Lobby({ lobby, meta, me, send }: { lobby: LobbyMsg; meta: GameMeta; me:
   const [cfg, setCfg] = useState<Record<string, any>>(lobby.settings);
   const [waktu, setWaktu] = useState(lobby.waktu);
   const [jeda, setJeda] = useState(lobby.jeda);
+  const [jedaHasil, setJedaHasil] = useState(lobby.jeda_hasil);
+  const [penonton, setPenonton] = useState(lobby.penonton_semua);
   const [botName, setBotName] = useState('');
   const [tpl, setTpl] = useState<string>('__kode__');
   const [editor, setEditor] = useState(false);
-  const dirty = JSON.stringify(cfg) !== JSON.stringify(lobby.settings) || waktu !== lobby.waktu || jeda !== lobby.jeda;
+  const dirty = JSON.stringify(cfg) !== JSON.stringify(lobby.settings) || waktu !== lobby.waktu || jeda !== lobby.jeda
+    || jedaHasil !== lobby.jeda_hasil || penonton !== lobby.penonton_semua;
+  const pakaiJeda = meta.jeda_pada.length > 0;
 
   useEffect(() => {
     if (!dirty) {
       setCfg(lobby.settings);
       setWaktu(lobby.waktu);
       setJeda(lobby.jeda);
+      setJedaHasil(lobby.jeda_hasil);
+      setPenonton(lobby.penonton_semua);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lobby.settings, lobby.waktu, lobby.jeda]);
+  }, [lobby.settings, lobby.waktu, lobby.jeda, lobby.jeda_hasil, lobby.penonton_semua]);
 
   const full = lobby.kursi.length >= lobby.max;
   const allBots = lobby.kursi.length > 0 && lobby.kursi.every((k) => k.kind === 'bot');
@@ -283,7 +430,7 @@ function Lobby({ lobby, meta, me, send }: { lobby: LobbyMsg; meta: GameMeta; me:
             </div>
             <p className="hint">
               {mySeat.kind === 'manusia'
-                ? `Kamu yang memutuskan setiap langkah (waktu ${lobby.waktu} detik; kalau habis, aksi bawaan dipakai).`
+                ? `Kamu yang memutuskan setiap langkah (waktu ${lobby.waktu} detik; kalau habis, pilihan yang sedang terlihat di layarmu dikirim otomatis).`
                 : `Kursimu dimainkan bot "${mySeat.label}". Kamu tinggal menonton.`}
             </p>
           </div>
@@ -311,25 +458,49 @@ function Lobby({ lobby, meta, me, send }: { lobby: LobbyMsg; meta: GameMeta; me:
           <h3>Aturan room</h3>
           {isHost ? (
             <>
+              <ActiveRules meta={meta} values={lobby.settings} />
               <SettingsForm meta={meta} values={cfg} onChange={setCfg} />
-              <div className="fields">
-                <label className="field">Waktu manusia (detik)
-                  <input type="number" min={3} max={300} value={waktu} onChange={(e) => setWaktu(Number(e.target.value))} />
-                </label>
-                <label className="field">Jeda langkah bot (detik)
-                  <input type="number" min={0} max={5} step={0.1} value={jeda} onChange={(e) => setJeda(Number(e.target.value))} />
-                </label>
-              </div>
-              <p className="hint">Jeda 0 + semua kursi bot = match langsung dihitung server dan hasilnya diputar sebagai replay.</p>
-              <button type="button" className="btn small" disabled={!dirty} onClick={() => send({ type: 'atur', settings: cfg, waktu, jeda })}>Simpan aturan</button>
+              {dirty && <p className="hint">⚠️ Ada perubahan yang belum disimpan. Pemain lain baru melihatnya setelah kamu menekan <b>Simpan aturan</b>.</p>}
+              <details className="set-group" open>
+                <summary>⏱️ Waktu & penonton</summary>
+                <div className="fields">
+                  <label className="field">Waktu manusia (detik)
+                    <input type="number" min={3} max={300} value={waktu} onChange={(e) => setWaktu(Number(e.target.value))} />
+                  </label>
+                  <label className="field">Jeda langkah bot (detik)
+                    <input type="number" min={0} max={5} step={0.1} value={jeda} onChange={(e) => setJeda(Number(e.target.value))} />
+                  </label>
+                  {pakaiJeda && (
+                    <label className="field">Jeda lihat hasil ronde (detik)
+                      <input type="number" min={0} max={30} step={1} value={jedaHasil} onChange={(e) => setJedaHasil(Number(e.target.value))} />
+                    </label>
+                  )}
+                  <label className="field">Penonton melihat semua rahasia
+                    <select className="input" value={penonton ? '1' : '0'} onChange={(e) => setPenonton(e.target.value === '1')}>
+                      <option value="0">Tidak (penonton ikut kena kabut)</option>
+                      <option value="1">Ya (hati-hati, bisa membocorkan)</option>
+                    </select>
+                  </label>
+                </div>
+                <p className="hint">
+                  Jeda bot 0 + semua kursi bot = match langsung dihitung server dan hasilnya diputar sebagai replay.
+                  {pakaiJeda && ' Jeda lihat hasil: setelah tiap ronde semua pemain melihat hasilnya dulu; waktu ronde berikutnya baru mulai sesudahnya (bisa dilewati kalau semua menekan "Lanjut").'}
+                </p>
+              </details>
+              <button type="button" className="btn small primary" disabled={!dirty}
+                onClick={() => send({ type: 'atur', settings: cfg, waktu, jeda, jeda_hasil: jedaHasil, penonton_semua: penonton })}>Simpan aturan</button>
             </>
           ) : (
             <>
               <SettingsSummary meta={meta} values={lobby.settings} />
-              <p className="hint">Waktu manusia {lobby.waktu} detik · jeda bot {lobby.jeda} detik. Hanya host yang bisa mengubah.</p>
+              <p className="hint">
+                Waktu manusia {lobby.waktu} detik · jeda bot {lobby.jeda} detik{pakaiJeda ? ` · jeda lihat hasil ${lobby.jeda_hasil} detik` : ''}
+                {lobby.penonton_semua ? ' · penonton melihat semua' : ''}. Hanya host yang bisa mengubah.
+              </p>
             </>
           )}
         </div>
+        <SesiTable rows={lobby.sesi ?? []} isHost={isHost} onReset={() => send({ type: 'reset_sesi' })} />
       </div>
 
       <div className="lobby-main">
@@ -389,45 +560,134 @@ export function RulesText({ meta }: { meta: GameMeta }) {
 }
 
 /* ================================================================== main */
-function Live({ lobby, meta, start, upd, log, actedStep, done, offset, act }: {
-  lobby: LobbyMsg; meta: GameMeta; start: StartInfo | null; upd: UpdateMsg | null; log: string[]; actedStep: number;
-  done: { step: number; seats: number[] }; offset: number; act: (a: unknown) => void;
+/** Getar + bunyi + judul tab berkedip saat giliranmu dimulai, dan sekali lagi 5 detik sebelum waktu habis. */
+function useTurnAlert(key: string | null, remaining: number, enabled: boolean) {
+  const last = useRef<string | null>(null);
+  const warned = useRef<string | null>(null);
+  useEffect(() => {
+    if (!key) {
+      stopFlash();
+      return;
+    }
+    if (!enabled || last.current === key) return;
+    last.current = key;
+    buzz([120, 60, 120]);
+    beep(880, 130, 1);
+    if (document.hidden || !document.hasFocus()) flashTitle('⏰ Giliranmu! · Arena Mabar');
+  }, [key, enabled]);
+  useEffect(() => {
+    if (!key || !enabled || warned.current === key || remaining <= 0 || remaining > 5) return;
+    warned.current = key;
+    buzz(250);
+    beep(660, 110, 2);
+    flashTitle('⏳ 5 detik lagi! · Arena Mabar');
+  }, [key, enabled, remaining]);
+  useEffect(() => {
+    const stop = () => {
+      if (!document.hidden) stopFlash();
+    };
+    document.addEventListener('visibilitychange', stop);
+    window.addEventListener('focus', stop);
+    return () => {
+      document.removeEventListener('visibilitychange', stop);
+      window.removeEventListener('focus', stop);
+    };
+  }, []);
+}
+
+function Live({ lobby, meta, me, start, upd, log, actedStep, done, offset, act, draft, lanjut, ubah, pause, conn, siap, sent, notif }: {
+  lobby: LobbyMsg; meta: GameMeta; me: string | null; start: StartInfo | null; upd: UpdateMsg | null; log: string[]; actedStep: number;
+  done: { step: number; seats: number[] }; offset: number; act: (a: unknown) => void; draft: (a: unknown) => void;
+  lanjut: () => void; ubah: () => void; pause: () => void; conn: ConnStatus; siap: { step: number; seats: number[] };
+  sent: { step: number; aksi: unknown } | null; notif: boolean;
 }) {
   const [, tick] = useState(0);
   const humanTimer = !!upd && upd.deadline > 0 && upd.pending.some((p) => lobby.kursi[p]?.kind === 'manusia');
+  const pausing = !!upd?.jeda;
   useEffect(() => {
-    if (!humanTimer) return;
+    if (!humanTimer && !pausing) return;
     const t = window.setInterval(() => tick((x) => x + 1), 250);
     return () => window.clearInterval(t);
-  }, [humanTimer]);
+  }, [humanTimer, pausing]);
 
+  const isHost = lobby.host_id === me;
   const names = start?.names ?? lobby.kursi.map((k) => k.name);
+  const mine = start?.main_sendiri ?? false;
+  const online = conn === 'open';
+  const paused = upd?.dijeda_sejak != null;
+  const serverNow = Date.now() / 1000 - offset;
+  const remaining = upd && humanTimer ? Math.max(0, upd.deadline - (paused ? upd.dijeda_sejak! : serverNow)) : 0;
+  const timeUp = humanTimer && remaining <= 0 && !paused;
+  const canAct = !!upd && upd.my_turn && mine && actedStep !== upd.step && online && !paused && !timeUp;
+  useTurnAlert(canAct && upd ? `${upd.step}:${upd.versi ?? ''}` : null, remaining, notif);
+
   if (start?.instan) {
     return <div className="panel running-banner"><div className="spinner" /> Semua kursi bot: match sedang dihitung server, sebentar lagi replay muncul…</div>;
   }
   if (!upd) return <div className="panel running-banner"><div className="spinner" /> Menunggu langkah pertama…</div>;
 
   const R = rendererFor(meta.id);
-  const mine = start?.main_sendiri ?? false;
-  const canAct = upd.my_turn && mine && actedStep !== upd.step;
-  const acted = !meta.mandiri && mine && actedStep === upd.step && upd.pending.includes(upd.seat ?? -1);
-  const remaining = humanTimer ? Math.max(0, upd.deadline - (Date.now() / 1000 - offset)) : 0;
+  const mySeat = upd.seat ?? -1;
+  const acted = !meta.mandiri && mine && upd.pending.includes(mySeat) && (actedStep === upd.step || (upd.acted ?? []).includes(mySeat));
   const total = lobby.waktu;
   const doneSeats = new Set([...(upd.acted ?? []), ...(done.step === upd.step ? done.seats : [])]);
   const waiting = meta.mandiri ? [] : upd.pending.filter((p) => !doneSeats.has(p)).map((p) => names[p]);
+  const jeda = upd.jeda;
+  const sisaJeda = jeda ? Math.max(0, jeda.sampai - (paused ? upd.dijeda_sejak! : serverNow)) : 0;
+  const siapSeats = new Set([...(jeda?.siap ?? []), ...(siap.step === upd.step ? siap.seats : [])]);
+  const iAmReady = upd.seat != null && siapSeats.has(upd.seat);
+  const roundLines = jeda ? (upd.events ?? []).map(describeEvent).filter(Boolean) as string[] : [];
+  const mySent = sent && sent.step === upd.step ? sent : null;
 
   return (
     <div className="live">
+      {!online && (
+        <div className="conn-banner" role="status"><div className="spinner" /> Koneksi terputus, menyambung ulang… Pilihanmu tetap tersimpan; kirim lagi setelah tersambung.</div>
+      )}
+      {paused && (
+        <div className="conn-banner pause-host" role="status">⏸ Match dijeda host. Waktu berhenti dan pilihan dikunci sampai host melanjutkan.</div>
+      )}
       {humanTimer && (
         <div className={`timer ${remaining < 5 ? 'low' : ''}`} aria-label={`Sisa waktu ${Math.ceil(remaining)} detik`}>
           <i style={{ width: `${Math.min(100, (remaining / Math.max(total, 1)) * 100)}%` }} />
-          <span>{Math.ceil(remaining)} dtk</span>
+          <span>{paused ? '⏸ ' : ''}{Math.ceil(remaining)} dtk</span>
+        </div>
+      )}
+      {(isHost || mySent || timeUp) && (
+        <div className="live-bar row">
+          {mySent && !meta.mandiri && (
+            <span className="sent-chip">✅ Jawabanmu: <b>{describeAction(mySent.aksi)}</b></span>
+          )}
+          {mySent && !meta.mandiri && upd.pending.includes(mySeat) && !jeda && !timeUp && (
+            <button type="button" className="btn small" onClick={ubah}>✏️ Ubah</button>
+          )}
+          {timeUp && upd.pending.includes(mySeat) && !acted && <span className="hint">⏳ Waktu habis, pilihan di layarmu dikirim otomatis…</span>}
+          <span className="spacer" />
+          {isHost && <button type="button" className="btn small" onClick={pause}>{paused ? '▶ Lanjutkan match' : '⏸ Jeda match'}</button>}
+        </div>
+      )}
+      {jeda && (
+        <div className="pause-banner panel" role="status">
+          <div className="row">
+            <b>📊 Hasil ronde</b>
+            <span className="hint">ronde berikutnya mulai dalam <b>{Math.ceil(sisaJeda)}</b> dtk</span>
+            <span className="spacer" />
+            {mine && (
+              <button type="button" className="btn small primary" disabled={iAmReady || !online} onClick={lanjut}>
+                {iAmReady ? 'Menunggu yang lain…' : 'Lanjut ▶'}
+              </button>
+            )}
+          </div>
+          <div className="pause-bar"><i style={{ width: `${Math.min(100, (sisaJeda / Math.max(jeda.lama, 1)) * 100)}%` }} /></div>
+          {roundLines.length > 0 && <ul className="pause-lines">{roundLines.map((l, k) => <li key={k}>{l}</li>)}</ul>}
+          {siapSeats.size > 0 && <p className="hint">Siap lanjut: {[...siapSeats].map((p) => names[p]).join(', ')}</p>}
         </div>
       )}
       <R view={upd.view} meta={meta} names={names} me={upd.seat} canAct={canAct} acted={acted} replay={false} events={upd.events}
-        settings={lobby.settings} pending={upd.pending} act={act} />
+        settings={lobby.settings} pending={upd.pending} act={act} draft={draft} />
       <div className="live-foot">
         {waiting.length > 0 && <span className="hint">Menunggu: {waiting.join(', ')}</span>}
+        <ActiveRules meta={meta} values={lobby.settings} />
         <details className="event-log" open>
           <summary>Kejadian</summary>
           <ol className="hist small">{log.map((l, k) => <li key={k}>{l}</li>)}</ol>
@@ -468,13 +728,13 @@ function Results({ final, meta, lobby, me, onBack }: { final: FinalMsg; meta: Ga
           </table>
         </div>
         {!final.ratings && <p className="hint">Masuk akun (menu Kilas Pasar → Akun) supaya hasil match masuk liga rating.</p>}
+        <ActiveRules meta={meta} values={lobby.settings} />
       </div>
-      <Reveal gid={meta.id} reveal={final.reveal} names={final.names} />
-      {final.frames.length > 1 && (
-        <div className="panel">
-          <h3>Replay</h3>
-          <FrameReplay frames={final.frames} meta={meta} names={final.names} settings={lobby.settings} />
-        </div>
+      <SesiTable rows={lobby.sesi ?? []} isHost={false} />
+      <Reveal gid={meta.id} reveal={final.reveal} names={final.names} lastView={final.frames[final.frames.length - 1]?.view} />
+      {(final.frames.length > 1 || final.replay_id) && (
+        <ReplayPanel frames={final.frames} meta={meta} names={final.names} settings={lobby.settings} replayId={final.replay_id}
+          initial="semua" key={final.replay_id ?? 'x'} />
       )}
       {Object.entries(final.logs ?? {}).map(([n, lg]) => <HubBotLog key={n} name={n} log={lg} />)}
     </div>

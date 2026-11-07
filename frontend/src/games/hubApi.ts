@@ -11,6 +11,16 @@ export interface SettingMeta {
   max: number | null;
   pilihan: [string, string][] | null;
   ket: string;
+  grup: 'dasar' | 'informasi' | 'aturan' | 'kejutan';
+  /** tampil hanya kalau setting lain bernilai ini (nilai atau list nilai) */
+  jika: Record<string, any> | null;
+}
+
+export interface PresetMeta {
+  id: string;
+  nama: string;
+  ket: string;
+  nilai: Record<string, any>;
 }
 
 export interface TemplateMeta {
@@ -36,6 +46,11 @@ export interface GameMeta {
   label_skor: string;
   aturan: string;
   format_aksi: string;
+  /** jenis event akhir ronde; kosong = game ini tidak memakai jeda lihat hasil */
+  jeda_pada: string[];
+  /** detik bawaan jeda lihat hasil */
+  jeda_hasil: number;
+  presets: PresetMeta[];
 }
 
 export interface SeatInfo {
@@ -60,12 +75,23 @@ export interface LobbyMsg {
   settings: Record<string, any>;
   waktu: number;
   jeda: number;
+  jeda_hasil: number;
+  penonton_semua: boolean;
+  dijeda: boolean;
+  sesi: SesiRow[];
   min: number;
   max: number;
   match_no: number;
   kursi: SeatInfo[];
   penonton: string[];
   anggota: { id: string; name: string; online: boolean }[];
+}
+
+export interface SesiRow {
+  nama: string;
+  main: number;
+  juara: number;
+  poin: number;
 }
 
 export interface ResultData {
@@ -99,6 +125,8 @@ export interface FinalMsg {
   frames: Frame[];
   logs: Record<string, HubLogEntry[]>;
   ulang?: boolean;
+  /** untuk memutar ulang dari sudut pandang satu pemain (lihat fetchSudut) */
+  replay_id?: string | null;
 }
 
 export interface UpdateMsg {
@@ -112,6 +140,12 @@ export interface UpdateMsg {
   now: number;
   step: number;
   events: any[];
+  /** sedang jeda lihat hasil ronde (null = tidak) */
+  jeda: { sampai: number; siap: number[]; lama: number } | null;
+  /** waktu server saat host menjeda match (null = tidak dijeda) */
+  dijeda_sejak: number | null;
+  /** mode mandiri: nomor langkah kursiku (dikirim balik bersama aksi) */
+  versi: number | null;
 }
 
 export interface HubSession {
@@ -175,11 +209,16 @@ export function validasi(game: string, kode: string) {
 }
 
 export type LatihanResult =
-  | { ok: true; result: ResultData; frames: Frame[]; log: HubLogEntry[]; names: string[]; reveal: any; settings: Record<string, any> }
+  | { ok: true; result: ResultData; frames: Frame[]; log: HubLogEntry[]; names: string[]; reveal: any; settings: Record<string, any>; replay_id?: string }
   | { ok: false; error: BotErrorInfo };
 
 export function latihan(body: { game: string; kode: string; nama: string; lawan: string[]; settings: Record<string, any> }) {
   return postJson<LatihanResult>('api/main/latihan', body);
+}
+
+/** Replay match yang sudah selesai dari sudut pandang satu kursi (-1 = penonton). */
+export function fetchSudut(rid: string, kursi: number) {
+  return getJson<{ kursi: number; frames: Frame[] }>(`api/main/sudut/${encodeURIComponent(rid)}?kursi=${kursi}`);
 }
 
 export interface LigaRow {

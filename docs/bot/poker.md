@@ -20,6 +20,8 @@ Pemain: 2–8. Fungsi wajib: `def aksi():`.
   atau batas tangan tercapai; peringkat menurut chip (yang tersingkir belakangan lebih tinggi).
 - **Keadilan dek:** hash seed (`hash_dek`) diumumkan dari awal; seed dibuka di layar hasil supaya bisa dicek ulang.
 - Waktu habis = check kalau bisa, kalau tidak fold.
+- Opsi host: **chip lawan samar** (dibulatkan), **ante** (% big blind, dipasang semua pemain tiap tangan), **bounty** (skor tambahan
+  untuk tiap pemain yang kamu singkirkan), dan **Short Deck** (kartu 6–A saja; flush > full house; A-6-7-8-9 straight).
 
 ## Aksi yang dikembalikan
 
@@ -42,8 +44,10 @@ Salah satu:
   "pot": 180, "taruhan_tertinggi": 40, "untuk_ikut": 20, "min_raise_ke": 60, "maks_raise_ke": 990,
   "aksi_valid": ["fold", "call", "raise", "allin"], "giliran": "Budi",
   "aksi_tangan": [ {"pemain": "Ani", "aksi": "raise", "jumlah": 40, "ke": 40, "jalan": "preflop"} ],
-  "riwayat": [ {"no": 2, "meja": [...], "pot": 300, "menang": {"Ani": 300}, "showdown": {"Ani": {"kartu": [...], "tangan": "Flush"}}, "aksi": [...]} ] }
+  "riwayat": [ {"no": 2, "meja": [...], "pot": 300, "menang": {"Ani": 300}, "showdown": {"Ani": {"kartu": [...], "tangan": "Flush"}}, "aksi": [...]} ],
+  "chip_samar": False, "ante": 0, "short_deck": False, "bounty": 0, "bounty_dapat": {"Budi": 1, ...} }
 ```
+Kalau `chip_samar` True, `chip` lawan dibulatkan ke kelipatan 5 big blind (chipmu sendiri pasti).
 
 ## Fungsi yang tersedia
 
@@ -70,12 +74,20 @@ Salah satu:
 
 ## Pengaturan room (diatur host)
 
-| Pengaturan | Default | Keterangan |
-|---|---|---|
-| Chip awal | 1000 |  |
-| Small blind awal | 10 | Big blind = 2 × small blind. |
-| Blind naik tiap (tangan) | 10 | Blind dikali 1,5 setiap sekian tangan. 0 = tetap. |
-| Batas tangan | 40 | Berhenti setelah sekian tangan; peringkat menurut chip. |
+Pengaturan **Informasi** menyembunyikan sebagian `info()` (nilainya jadi `None` atau tidak ada) supaya bot dan manusia sama-sama bermain dengan kabut. Tulis bot yang tetap jalan kalau suatu nilai `None`.
+
+| Grup | Pengaturan | Default | Keterangan |
+|---|---|---|---|
+| Dasar | Chip awal (`chip`) | 1000 |  |
+| Dasar | Small blind awal (`sb`) | 10 | Big blind = 2 × small blind. |
+| Dasar | Blind naik tiap (tangan) (`naik_tiap`) | 10 | Blind dikali 1,5 setiap sekian tangan. 0 = tetap. |
+| Dasar | Batas tangan (`tangan_maks`) | 40 | Berhenti setelah sekian tangan; peringkat menurut chip. |
+| Informasi (kabut) | Chip lawan samar (`chip_samar`) | False | Tumpukan chip lawan hanya terlihat dibulatkan (kelipatan 5 big blind). Taruhan & pot tetap pasti. |
+| Aturan | Ante (% big blind) (`ante`) | 0 | Setiap tangan semua pemain memasang ante ke pot sebelum blind. Pot lebih besar, permainan lebih berani. |
+| Aturan | Bounty per pemain disingkirkan (`bounty`) | 0 | Menyingkirkan pemain menambah skor sebesar ini (skor = chip + bounty). Diberikan ke pemenang pot terbesar di tangan itu. |
+| Kejutan | Short Deck (6+) (`short_deck`) | False | Kartu 2–5 dibuang (36 kartu). Flush mengalahkan full house, dan A-6-7-8-9 adalah straight. |
+
+**Preset:** *Kabut* (chip_samar=True); *Kacau* (short_deck=True, ante=25, bounty=300)
 
 ## Bahasa bot (sama untuk semua game)
 

@@ -249,11 +249,11 @@ def test_blotto_seri_dibagi():
 
 def test_dua_pertiga_kasdesa_farol():
     g = GAMES["duapertiga"]
-    s = g.init(g.clean_settings({"ronde": 1}), ["A", "B", "C"], 1)
+    s = g.init(g.clean_settings({"ronde": 1, "mode_faktor": "tetap"}), ["A", "B", "C"], 1)
     g.apply(s, {0: 0, 1: 30, 2: 60})          # rata 30 -> target 20
     assert s["skor"] == [0, 1, 0]
     k = GAMES["kasdesa"]
-    s = k.init(k.clean_settings({"ronde": 1, "pendapatan": 10, "pengali": 2.0}), ["A", "B"], 1)
+    s = k.init(k.clean_settings({"ronde": 1, "pendapatan": 10, "pengali": 2.0, "target": 0}), ["A", "B"], 1)
     k.apply(s, {0: 10, 1: 0})
     assert k.scores(s) == [10.0, 20.0]
     f = GAMES["farol"]
@@ -293,6 +293,28 @@ def test_robot_tabrakan_dan_bertukar_batal():
     assert (a["c"], b["c"]) == (5, 6)
     g.apply(s, {0: "atas", 1: "kiri"})             # B mengikuti A yang pergi: boleh
     assert (a["r"], a["c"], b["c"]) == (4, 5, 5)
+
+
+def test_robot_gerak_dulu_baru_tembak():
+    """Lawan yang segaris masih bisa kabur; penembak yang menebak petak tujuan lawan yang kena."""
+    g, s = _robot_flat(["A", "B"], {"hp": 3})
+    a, b = s["bots"]
+    a["r"], a["c"], b["r"], b["c"] = 3, 1, 3, 5
+    ev = g.apply(s, {0: "tembak_kanan", 1: "atas"})              # B keluar dari garis sebelum tembakan dihitung
+    assert b["hp"] == 3 and a["poin"] == 0 and (b["r"], b["c"]) == (2, 5)
+    assert next(e for e in ev if e["jenis"] == "tembak")["kena"] is None
+    for _ in range(3):
+        g.apply(s, {0: "diam", 1: "diam"})
+    a["r"], a["c"], b["r"], b["c"] = 4, 1, 3, 5
+    g.apply(s, {0: "tembak_kanan", 1: "bawah"})                  # A menembak ke baris tujuan B: kena
+    assert b["hp"] == 2 and a["poin"] == 1
+    # library prediksi: arah tembak ke petak tujuan & tebakan langkah ke kristal
+    s["crystals"] = [[4, 9]]
+    a["cd"] = 0
+    lib = g.bot_library(s, 0, g.observe(s, 0))
+    assert lib["tebak_langkah"]("B") == [4, 6]
+    assert lib["arah_tembak_ke"](4, 6) == "kanan" and lib["arah_tembak_ke"](5, 6) is None
+    assert [4, 5] in lib["petak_mungkin"]("B") and len(lib["petak_mungkin"]("B")) == 5
 
 
 def test_robot_tembak_cooldown_dan_kristal():
@@ -419,3 +441,57 @@ def test_dokumen_panduan_bot_terbaru():
         path = OUT / name
         assert path.exists(), f"{path} belum dibuat"
         assert path.read_text(encoding="utf-8") == text, f"{path} ketinggalan, jalankan python -m app.games.gen_docs"
+
+
+def test_dua_pertiga_faktor_rahasia_dan_kembar_gugur():
+    g = GAMES["duapertiga"]
+    cfg = g.clean_settings({"ronde": 3})
+    assert cfg["mode_faktor"] == "acak" and cfg["kembar_gugur"]
+    s = g.init(cfg, ["A", "B", "C"], 5)
+    v = g.public(s)
+    assert v["faktor"] is None and v["faktor_rata"] == 1.0          # faktor belum dibuka
+    ev = g.apply(s, {0: 50, 1: 50, 2: 10})
+    r = ev[0]
+    assert 0.5 <= r["faktor"] <= 1.5 and r["faktor"] == g._factor(s, 1)   # deterministik dari seed
+    assert r["gugur"] == ["A", "B"] and r["pemenang"] == ["C"]       # 50 paling dekat, tapi kembar
+    ev = g.apply(s, {0: 20, 1: 20, 2: 20})
+    assert ev[0]["pemenang"] == [] and s["skor"] == [0, 0, 1]        # semua kembar: tidak ada pemenang
+    s2 = g.init(g.clean_settings({"kembar_gugur": False, "mode_faktor": "tetap", "faktor": 1.5}), ["A", "B"], 1)
+    g.apply(s2, {0: 60, 1: 60})
+    assert s2["skor"] == [1, 1]
+    assert g.public(s2)["faktor"] == 1.5
+
+
+def test_kasdesa_target_bonus_dan_akhir_rahasia():
+    k = GAMES["kasdesa"]
+    cfg = k.clean_settings({"ronde": 12, "pendapatan": 10, "pengali": 1.6, "target": 50, "bonus": 10})
+    s = k.init(cfg, ["A", "B", "C", "D"], 3)
+    assert k.public(s)["target"] == 20
+    ev = k.apply(s, {0: 5, 1: 5, 2: 5, 3: 5})                        # pas target
+    assert ev[0]["tercapai"] and ev[0]["bonus"] == 10
+    assert k.scores(s) == [23.0] * 4                                 # 10 - 5 + 8 + 10
+    ev = k.apply(s, {0: 5, 1: 5, 2: 5, 3: 4})                        # kurang satu koin: bonus hilang
+    assert not ev[0]["tercapai"] and k.scores(s)[3] == 23 + 6 + 7.6
+    # menutup kekurangan target menguntungkan diri sendiri (insentif untuk menyumbang)
+    lain = 15
+    tanpa = 10 + lain * 1.6 / 4
+    dengan = 10 - 5 + (lain + 5) * 1.6 / 4 + 10
+    assert dengan > tanpa
+    # jumlah ronde sebenarnya dirahasiakan, tapi tetap ditentukan seed
+    akhir = {k.init(cfg, ["A", "B"], seed)["akhir"] for seed in range(40)}
+    assert min(akhir) >= 9 and max(akhir) <= 15 and len(akhir) > 3
+    assert k.public(k.init(cfg, ["A", "B"], 1))["ronde_total"] == 12
+    klasik = k.init(k.clean_settings({"ronde": 5, "akhir_rahasia": False, "target": 0}), ["A", "B"], 1)
+    assert klasik["akhir"] == 5 and k.public(klasik)["akhir_pasti"] and k.public(klasik)["bonus"] == 0
+
+
+@pytest.mark.parametrize("gid", ["tycoon", "duapertiga", "kasdesa", "blotto", "lelang", "farol"])
+def test_frame_replay_tidak_berbagi_riwayat(gid):
+    """Dulu setiap frame replay menunjuk list riwayat yang sama, jadi replay hari 1 sudah menampilkan data hari terakhir."""
+    g = GAMES[gid]
+    codes = [t["kode"] for t in g.templates][:2]
+    out = play_sync(gid, {}, ["A", "B"], codes, 4)
+    frames = out["frames"]
+    key = next(k for k in ("riwayat",) if k in frames[-1]["view"])
+    lens = [len(f["view"][key]) for f in frames]
+    assert lens == list(range(len(frames))), lens

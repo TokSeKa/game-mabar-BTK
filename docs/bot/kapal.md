@@ -12,12 +12,15 @@ Pemain: 2–2. Fungsi wajib: `def aksi():`.
 - **Fase tembak:** pemain bergantian menembak satu petak papan lawan. Hasilnya: *meleset*, *kena*, atau *tenggelam* (kalau semua petak kapal itu sudah kena). Ukuran kapal yang tenggelam diumumkan.
 - Yang pertama menenggelamkan seluruh armada lawan menang. Siapa yang menembak duluan ditentukan undian di awal.
 - Kalau waktu habis: susunan diacak otomatis / tembakan diarahkan ke petak acak yang belum ditembak.
+- Opsi host: **kabar tenggelam** (ukuran diumumkan / hanya "tenggelam" / tidak diumumkan), **salvo** (tembakan per giliran = kapalmu yang
+  masih mengapung), **sonar** (hitung petak kapal lawan di area 3×3, memakai satu tembakan), **ranjau** (menembak ranjau lawan = sisa
+  tembakan hangus dan giliran berikutnya dilewati), **kena = tembak lagi**.
 
 ## Aksi yang dikembalikan
 
 - Fase `susun`: list posisi untuk setiap kapal sesuai urutan `armada`, masing-masing `[baris, kolom, arah]` dengan arah `"H"` (mendatar ke kanan) atau `"V"` (menurun ke bawah). Baris & kolom mulai dari 0.
   Contoh armada standar: `[[0,0,"H"], [2,0,"H"], [4,0,"H"], [6,0,"H"], [8,0,"H"]]`.
-- Fase `tembak`: `[baris, kolom]`, misalnya `[3, 7]`.
+- Fase `tembak`: `[baris, kolom]`, misalnya `[3, 7]`. Kalau sonar diaktifkan: `{"sonar": [baris, kolom]}` (pusat area 3×3).
 
 ## Isi `info()`
 
@@ -25,9 +28,13 @@ Pemain: 2–2. Fungsi wajib: `def aksi():`.
 { "fase": "susun" | "tembak", "ukuran": 10, "armada": [5,4,3,3,2], "giliran": "Budi",
   "papan_saya": ["K.....", ...],    # baris teks: K = kapalku, x = tembakan lawan meleset, o = kapalku kena, # = kapalku tenggelam
   "papan_tembak": ["..x.o#", ...],  # tembakanku ke lawan: . belum, x meleset, o kena, # tenggelam
-  "kapal_lawan_sisa": [5,3,2],      # ukuran kapal lawan yang belum tenggelam
-  "riwayat": [ {"penembak": "Budi", "baris": 3, "kolom": 7, "hasil": "kena" | "meleset" | "tenggelam", "ukuran": 3} ] }
+  "kapal_lawan_sisa": [5,3,2],      # ukuran kapal lawan yang belum tenggelam (None kalau ukuran dirahasiakan)
+  "jumlah_kapal_lawan_sisa": 3,     # None kalau kabar tenggelam tidak diumumkan
+  "sisa_tembak": 1, "sonar_sisa": 0, "ranjau": 0, "lewati": False,
+  "riwayat": [ {"penembak": "Budi", "baris": 3, "kolom": 7, "hasil": "kena" | "meleset" | "tenggelam" | "ranjau", "ukuran": 3},
+               {"penembak": "Ani", "sonar": [4, 4], "jumlah": 2} ] }
 ```
+Di `papan_tembak` ranjau lawan yang kena ditandai `*`. Di `papan_saya`: `m` = ranjaumu, `*` = ranjaumu yang sudah kena.
 
 ## Fungsi yang tersedia
 
@@ -44,11 +51,19 @@ Pemain: 2–2. Fungsi wajib: `def aksi():`.
 
 ## Pengaturan room (diatur host)
 
-| Pengaturan | Default | Keterangan |
-|---|---|---|
-| Ukuran papan | 10 |  |
-| Armada | standar |  |
-| Kena = tembak lagi | False | Kalau aktif, tembakan yang kena memberi giliran tambahan. |
+Pengaturan **Informasi** menyembunyikan sebagian `info()` (nilainya jadi `None` atau tidak ada) supaya bot dan manusia sama-sama bermain dengan kabut. Tulis bot yang tetap jalan kalau suatu nilai `None`.
+
+| Grup | Pengaturan | Default | Keterangan |
+|---|---|---|---|
+| Dasar | Ukuran papan (`ukuran`) | 10 |  |
+| Dasar | Armada (`armada`) | standar |  |
+| Aturan | Kena = tembak lagi (`tembak_lagi`) | False | Kalau aktif, tembakan yang kena memberi tembakan tambahan. |
+| Informasi (kabut) | Kabar kapal tenggelam (`info_tenggelam`) | ukuran | Makin sedikit kabar, makin susah tahu kapan berhenti memburu satu kapal. |
+| Aturan | Salvo (`salvo`) | False | Setiap giliran kamu menembak sebanyak kapalmu yang masih mengapung. Kehilangan kapal = tembakan berkurang. |
+| Aturan | Sonar per pemain (`sonar`) | 0 | Sonar memakai satu tembakan untuk menghitung petak kapal lawan (yang belum kena) di area 3×3. |
+| Kejutan | Ranjau per papan (`ranjau`) | 0 | Ranjau disebar acak di air setiap papan. Menembak ranjau lawan = sisa tembakanmu hangus dan giliranmu berikutnya dilewati. |
+
+**Preset:** *Kabut* (info_tenggelam=tidak); *Kacau* (salvo=True, sonar=2, ranjau=3)
 
 ## Bahasa bot (sama untuk semua game)
 

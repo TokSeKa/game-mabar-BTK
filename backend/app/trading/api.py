@@ -294,9 +294,10 @@ class Conn:
         await svc.race_broadcast(room, svc.race_state(room))
 
     async def closed(self) -> None:
-        if self.sess is not None and self.sess.trader.send is self.send:
+        # bound method dibuat baru setiap diakses: bandingkan dengan == (bukan `is`, yang selalu False)
+        if self.sess is not None and self.sess.trader.send == self.send:
             self.sess.trader.send = None
-        if self.room is not None and self.tr is not None and self.tr.send is self.send:
+        if self.room is not None and self.tr is not None and self.tr.send == self.send:
             self.tr.send, self.tr.online = None, False
             try:
                 await self.svc.race_broadcast(self.room, self.svc.race_state(self.room))

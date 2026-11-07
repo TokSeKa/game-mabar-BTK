@@ -9,27 +9,35 @@ Pemain: 2–8. Fungsi wajib: `def aksi():`.
 ## Aturan
 
 - Setiap ronde, setiap pemain membagi **pasukan** (default 100) ke beberapa **medan** (default 5), bersamaan dan rahasia.
-- Tiap medan punya **nilai** (1–5). Nilai ronde ini dan ronde berikutnya sudah diumumkan.
+- Tiap medan punya **nilai** (1–5). Nilai ronde ini dan ronde berikutnya sudah diumumkan (nilai berikutnya bisa dirahasiakan host).
 - Pemain dengan pasukan terbanyak di sebuah medan mendapat nilai medan itu. Kalau seri, nilainya dibagi rata. Medan tanpa pasukan tidak dimiliki siapa pun.
-- Pasukan tidak berkurang: setiap ronde semua mulai lagi dengan jumlah pasukan penuh. Semua alokasi dibuka setelah ronde selesai.
+- Pasukan tidak berkurang: setiap ronde semua mulai lagi dengan jumlah pasukan penuh (kecuali opsi *pasukan menyusut*). Semua alokasi dibuka setelah ronde selesai (kecuali opsi *alokasi lawan rahasia*).
 - Poin terbanyak setelah semua ronde menang.
+- Opsi host: **benteng** (penguasa tunggal ronde lalu dihitung +X% di medan itu), **pasukan menyusut** (pasukan di medan yang kalah hilang,
+  ada bala bantuan tiap ronde), **medan kejutan** (⭐×2 nilai ganda, atau 🌫️ misteri bernilai −3 sampai 6 yang baru dibuka setelah ronde;
+  menguasai medan misteri bernilai minus = poin minus).
 
 ## Aksi yang dikembalikan
 
-List angka bulat ≥ 0 sepanjang jumlah medan, totalnya tidak lebih dari jumlah pasukan. Contoh 5 medan: `[30, 30, 20, 10, 10]`.
+List angka bulat ≥ 0 sepanjang jumlah medan, totalnya tidak lebih dari pasukanmu. Contoh 5 medan: `[30, 30, 20, 10, 10]`.
 
 ## Isi `info()`
 
 ```
 {
   "ronde": 3, "ronde_total": 10, "medan": 5, "pasukan": 100,
-  "nilai": [3, 1, 5, 2, 4],          # nilai medan ronde ini
-  "nilai_berikut": [2, 2, 1, 5, 3],  # ronde berikutnya (None di ronde terakhir)
+  "pasukan_saya": 100,               # pasukanmu ronde ini (berubah kalau pasukan menyusut)
+  "nilai": [3, 1, None, 2, 4],       # nilai medan ronde ini (None = medan misteri)
+  "khusus": [None, "ganda", "misteri", None, None],
+  "nilai_berikut": [2, 2, 1, 5, 3],  # ronde berikutnya (None kalau dirahasiakan / ronde terakhir)
+  "pemilik": ["Budi", None, ...],    # penguasa tunggal tiap medan di ronde lalu (untuk benteng)
   "skor": {"Budi": 12.5, ...},
-  "riwayat": [ {"ronde": 1, "nilai": [...], "alokasi": {"Budi": [20, 20, 20, 20, 20], ...},
-                "penguasa": [["Budi"], ["Ani", "Citra"], [], ...], "poin": {"Budi": 4.0, ...}} ]
+  "riwayat": [ {"ronde": 1, "nilai": [...], "alokasi": {"Budi": [20, 20, 20, 20, 20], "Ani": None, ...},
+                "penguasa": [["Budi"], ["Ani", "Citra"], [], ...], "poin": {"Budi": 4.0, ...}, "hilang": {"Budi": 20, ...},
+                "pasukan": {"Budi": 110, ...}} ]   # pasukan tiap pemain setelah ronde itu
 }
 ```
+Kalau alokasi lawan rahasia, `alokasi`, `hilang`, dan `pasukan` lawan berisi `None` (milikmu sendiri tetap terlihat).
 
 ## Fungsi yang tersedia
 
@@ -41,16 +49,27 @@ List angka bulat ≥ 0 sepanjang jumlah medan, totalnya tidak lebih dari jumlah 
 | `pemain()` | Daftar nama semua pemain, urut nomor kursi. |
 | `jumlah_pemain()` | Banyaknya pemain di match ini. |
 | `bagi_rata()` | Alokasi rata ke semua medan (sisa ke medan pertama). |
-| `rata_rata_lawan()` | Rata-rata pasukan lawan per medan di ronde lalu (list). |
+| `rata_rata_lawan()` | Rata-rata pasukan lawan per medan di ronde lalu (list), atau None kalau alokasi lawan rahasia. |
+| `pasukan_saya()` | Jumlah pasukanmu ronde ini. |
 
 ## Pengaturan room (diatur host)
 
-| Pengaturan | Default | Keterangan |
-|---|---|---|
-| Jumlah medan | 5 |  |
-| Pasukan per ronde | 100 |  |
-| Jumlah ronde | 10 |  |
-| Nilai medan berbeda-beda | True | Kalau mati, semua medan bernilai 1. |
+Pengaturan **Informasi** menyembunyikan sebagian `info()` (nilainya jadi `None` atau tidak ada) supaya bot dan manusia sama-sama bermain dengan kabut. Tulis bot yang tetap jalan kalau suatu nilai `None`.
+
+| Grup | Pengaturan | Default | Keterangan |
+|---|---|---|---|
+| Dasar | Jumlah medan (`medan`) | 5 |  |
+| Dasar | Pasukan per ronde (`pasukan`) | 100 |  |
+| Dasar | Jumlah ronde (`ronde`) | 10 |  |
+| Dasar | Nilai medan berbeda-beda (`nilai_acak`) | True | Kalau mati, semua medan bernilai 1. |
+| Informasi (kabut) | Alokasi lawan rahasia (`alokasi_rahasia`) | False | Setelah ronde, hanya penguasa tiap medan yang dibuka; jumlah pasukan lawan tidak. |
+| Informasi (kabut) | Nilai ronde berikutnya terlihat (`nilai_besok`) | True |  |
+| Aturan | Benteng (%) (`benteng`) | 0 | Penguasa tunggal sebuah medan di ronde sebelumnya bertahan lebih kuat: pasukannya di medan itu dihitung +sekian persen. |
+| Aturan | Pasukan menyusut (`menyusut`) | False | Pasukan tidak penuh lagi tiap ronde: pasukan di medan yang KALAH hilang; yang menang/seri kembali. Ditambah bala bantuan tiap ronde. |
+| Aturan | Bala bantuan per ronde (%) (`bala_bantuan`) | 30 | Persen dari pasukan awal yang datang tiap ronde (pasukan maksimal 2× pasukan awal). |
+| Kejutan | Medan kejutan (%) (`medan_kejutan`) | 0 | Peluang tiap medan jadi istimewa di ronde itu: ⭐×2 (nilai ganda) atau 🌫️ misteri (nilai −3 sampai 6, baru dibuka setelah ronde). |
+
+**Preset:** *Kabut* (alokasi_rahasia=True, nilai_besok=False); *Kacau* (benteng=30, menyusut=True, medan_kejutan=25)
 
 ## Bahasa bot (sama untuk semua game)
 
@@ -80,19 +99,19 @@ def aksi():
 
 ### Fokus Tiga
 
-Menumpuk pasukan di 3 medan bernilai tertinggi.
+Menumpuk pasukan di 3 medan bernilai tertinggi (medan misteri dianggap bernilai 1).
 
 ```python
 def aksi():
     i = info()
-    nilai = i["nilai"]
+    nilai = [v if v != None else 1 for v in i["nilai"]]
     urut = sorted(range(len(nilai)), key=lambda k: -nilai[k])
     pilihan = urut[:3]
-    total = sum(nilai[k] for k in pilihan)
+    total = sum(max(1, nilai[k]) for k in pilihan)
     alokasi = [0] * i["medan"]
-    sisa = i["pasukan"]
+    sisa = pasukan_saya()
     for k in pilihan:
-        alokasi[k] = i["pasukan"] * nilai[k] // total
+        alokasi[k] = pasukan_saya() * max(1, nilai[k]) // total
         sisa -= alokasi[k]
     alokasi[pilihan[0]] += sisa
     return alokasi
@@ -105,13 +124,13 @@ Mengalahkan rata-rata lawan di medan bernilai tinggi, lalu melepas sisanya.
 ```python
 def aksi():
     i = info()
-    if i["ronde"] == 1:
-        return bagi_rata()
     musuh = rata_rata_lawan()
-    nilai = i["nilai"]
+    if i["ronde"] == 1 or musuh == None:
+        return bagi_rata()
+    nilai = [v if v != None else 1 for v in i["nilai"]]
     urut = sorted(range(i["medan"]), key=lambda k: -nilai[k] / (musuh[k] + 1))
     alokasi = [0] * i["medan"]
-    sisa = i["pasukan"]
+    sisa = pasukan_saya()
     for k in urut:
         butuh = int(musuh[k]) + 1
         if butuh <= sisa:
