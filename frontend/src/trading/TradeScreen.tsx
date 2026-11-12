@@ -344,6 +344,8 @@ function RaceBar({ race, send }: { race?: RaceInfo; send: (m: Record<string, any
               {[0.5, 1, 2, 3, 5, 8, 12].map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </label>
+          <button className="btn danger" type="button" title="Hapus room ini untuk semua pemain"
+            onClick={() => window.confirm('Hapus room balapan ini? Balapan berhenti dan semua pemain dikeluarkan.') && send({ type: 'race_delete' })}>🗑️ Hapus room</button>
         </>
       )}
     </div>

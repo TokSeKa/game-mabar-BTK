@@ -5,8 +5,8 @@ import type { BotErrorInfo, LibDoc } from '../types';
 export interface SettingMeta {
   id: string;
   label: string;
-  jenis: 'int' | 'float' | 'bool' | 'pilihan';
-  default: number | boolean | string;
+  jenis: 'int' | 'float' | 'bool' | 'pilihan' | 'kartu';
+  default: number | boolean | string | any[];
   min: number | null;
   max: number | null;
   pilihan: [string, string][] | null;
@@ -51,6 +51,20 @@ export interface GameMeta {
   /** detik bawaan jeda lihat hasil */
   jeda_hasil: number;
   presets: PresetMeta[];
+  /** contoh isian kustom (misalnya kartu power Satu!) untuk editor di lobby */
+  contoh_kustom?: KartuKustom[];
+}
+
+/** Kartu power kustom Satu! (efeknya ditulis dengan kode). */
+export interface KartuKustom {
+  nama: string;
+  simbol: string;
+  warna: 'liar' | 'semua' | 'merah' | 'kuning' | 'hijau' | 'biru';
+  jumlah: number;
+  target: boolean;
+  nilai: number;
+  ket: string;
+  kode: string;
 }
 
 export interface SeatInfo {
@@ -68,6 +82,8 @@ export interface SeatInfo {
 export interface LobbyMsg {
   type: 'room';
   kode: string;
+  /** mode mandiri untuk pengaturan room sekarang */
+  mandiri?: boolean;
   game: string;
   nama_game: string;
   host_id: string;
@@ -146,6 +162,10 @@ export interface UpdateMsg {
   dijeda_sejak: number | null;
   /** mode mandiri: nomor langkah kursiku (dikirim balik bersama aksi) */
   versi: number | null;
+  /** match ini berjalan sendiri-sendiri (bisa tergantung pengaturan, misalnya Wordle balapan) */
+  mandiri?: boolean;
+  /** mode mandiri: waktu server (detik) sampai kursiku boleh beraksi lagi (hukuman), 0 = tidak ada */
+  tunggu?: number;
 }
 
 export interface HubSession {
@@ -206,6 +226,21 @@ export function getPanduan(gid: string): Promise<string> {
 
 export function validasi(game: string, kode: string) {
   return postJson<{ ok: boolean; error: BotErrorInfo | null }>('api/main/validasi', { game, kode });
+}
+
+export interface CekKustom {
+  ok: boolean;
+  error: BotErrorInfo | null;
+  kartu: KartuKustom | null;
+  contoh?: any[];
+  sesudah?: Record<string, number>;
+  giliran_berikut?: string;
+  warna?: string;
+}
+
+/** Cek isian kustom (kartu power): kode dikompilasi lalu dicoba di meja contoh. */
+export function cekKustom(game: string, item: unknown) {
+  return postJson<CekKustom>('api/main/kustom/cek', { game, item });
 }
 
 export type LatihanResult =

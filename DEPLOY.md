@@ -1,6 +1,6 @@
 # Deploy Game Mabar BTK ke VPS
 
-Panduan ini untuk VPS Linux (Ubuntu/Debian) yang juga menjalankan proyekmu yang lain. Semua game (Arena Mabar dengan 11 game, Suit Bot Arena,
+Panduan ini untuk VPS Linux (Ubuntu/Debian) yang juga menjalankan proyekmu yang lain. Semua game (Arena Mabar dengan 16 game, Suit Bot Arena,
 dan Kilas Pasar) berjalan sebagai **satu container Docker** bernama `suit-bot-arena` di port lokal (default `127.0.0.1:8080`), lalu dibuka
 ke internet lewat reverse proxy (Nginx atau Caddy) yang mungkin sudah kamu pakai.
 
@@ -17,6 +17,13 @@ Konfigurasi di folder `deploy/` sudah diuji dengan Nginx, baik di subdomain maup
 - VPS dengan Docker. RAM 1 GB cukup untuk main bareng; 2 GB kalau mau mengunduh data kripto penuh untuk Kilas Pasar.
 - (Disarankan) domain atau subdomain yang mengarah ke IP VPS, misalnya `suit.domainmu.com`.
 - Akses SSH.
+- Pilih lokasi VPS yang dekat dengan pemain (Jakarta/Singapura untuk pemain di Indonesia) supaya mode real-time
+  seperti Wordle balapan dan Labirin terasa responsif.
+
+Gambaran kapasitas (uji beban 8 Nov 2026, campuran Labirin, Wordle balapan, Evolusi, Monopoli, Satu, dan Poker;
+tiap room 1 manusia + 5 bot): 48 room (288 kursi) memakai ±15% dari satu core dan RAM proses ±115 MB, dengan jeda
+respons median di bawah 1 ms. Server hanya bisa memakai satu proses (lihat `--workers 1` di Dockerfile), jadi semua
+room hilang kalau container di-restart. Restart atau deploy ulang sebaiknya saat tidak ada yang sedang main.
 
 ## 1. Pasang Docker (lewati kalau sudah ada)
 

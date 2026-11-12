@@ -227,6 +227,14 @@ class RoomManager:
         self._fix_host(room)
         await self.broadcast_state(room)
 
+    async def delete_room(self, room: Room, p: Player) -> None:
+        if p.id != room.host_id:
+            raise RoomError("Hanya host yang bisa menghapus room.")
+        self.rooms.pop(room.code, None)            # hilang dari daftar dulu: tidak ada yang bisa masuk lagi
+        await self.broadcast(room, {"type": "room_deleted", "by": p.name})
+        for x in room.players.values():
+            x.send, x.online = None, False
+
     async def leave(self, room: Room, p: Player) -> None:
         room.players.pop(p.id, None)
         if not room.players:
@@ -272,6 +280,8 @@ class RoomManager:
             await self.reveal_code(room, p)
         elif t == "kick":
             await self.kick(room, p, msg.get("player_id"))
+        elif t == "delete_room":
+            await self.delete_room(room, p)
         elif t == "react":
             await self.react(room, p, msg.get("emoji"))
         elif t == "spectate":

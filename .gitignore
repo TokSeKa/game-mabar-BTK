@@ -8,4 +8,4 @@ frontend/dist/
 *.tsbuildinfo
 .lokal/
 backend/.venv/
-data/
+/data/

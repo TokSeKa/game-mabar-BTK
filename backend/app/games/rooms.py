@@ -107,12 +107,16 @@ class GameRoom:
         self.match_no = 0
         self.dirty = False   # mode mandiri: ada aksi manusia yang belum disiarkan ke semua
         self.vers: dict[int, int] = {}          # mode mandiri: nomor langkah tiap kursi (untuk menolak klik telat)
+        self.tunggu: dict[int, float] = {}      # mode mandiri: kursi baru boleh beraksi lagi setelah waktu ini (hukuman)
         self.paused_at = 0.0                    # > 0: match dijeda host sejak waktu ini
         self.penonton_semua = False             # penonton melihat tampilan lengkap (rahasia terbuka)
         self.sesi: dict[str, dict[str, Any]] = {}   # klasemen gabungan semua match di room ini
         self.langkah: list[dict[str, Any]] = []     # aksi tiap langkah (untuk replay sudut pandang pemain)
         self.seed = 0
         self.replay_store = replay_store
+        self.mandiri = game.is_mandiri(self.settings)   # mode mandiri bisa tergantung pengaturan (misalnya Wordle balapan)
+        self.empty_since = 0.0                  # > 0: sejak kapan tidak ada satu pun anggota yang online
+        self.deleted = False                    # room sudah dihapus (host atau bersih-bersih otomatis)
 
     # ------------------------------------------------------------ util
     def _id(self) -> str:
@@ -143,6 +147,7 @@ class GameRoom:
             "type": "room", "kode": self.code, "game": g.id, "nama_game": g.nama, "host_id": self.host_id,
             "status": self.status, "settings": self.settings, "waktu": self.waktu, "jeda": self.jeda,
             "jeda_hasil": self.jeda_hasil, "penonton_semua": self.penonton_semua, "dijeda": self.paused_at > 0,
+            "mandiri": self.game.is_mandiri(self.settings) if self.status != "main" else self.mandiri,
             "sesi": sorted(self.sesi.values(), key=lambda e: (-e["poin"], -e["juara"], e["main"], e["nama"].lower())),
             "min": g.min_pemain, "max": g.max_pemain, "match_no": self.match_no,
             "kursi": [s.public(self.members) for s in self.seats],
@@ -322,7 +327,7 @@ class GameRoom:
         self.step = 0
         self.frames, self.recent, self.final = [], [], None
         self.drafts, self.ready, self.pause_until, self.deadlines = {}, set(), 0.0, {}
-        self.vers, self.paused_at, self.langkah = {}, 0.0, []
+        self.vers, self.paused_at, self.langkah, self.tunggu = {}, 0.0, [], {}
         self.last = time.time()
         all_bots = all(s.kind == "bot" for s in self.seats)
         if all_bots and self.jeda == 0 and self.pool is not None:
@@ -330,13 +335,14 @@ class GameRoom:
             await self.broadcast({"type": "mulai", "instan": True, "names": names})
             self.task = asyncio.create_task(self._run_instant(names, seed))
             return
+        self.mandiri = g.is_mandiri(self.settings)
         self.state = g.init(self.settings, names, seed)
         self.frames.append({"step": 0, "view": g.frame_view(self.state), "events": []})
         await self.push_lobby()
         for mem in list(self.members.values()):
             await self._send(mem, {"type": "mulai", "instan": False, "names": names, "seat": self.view_seat(mem.id),
                                    "main_sendiri": self.seat_of(mem.id) is not None})
-        self.task = asyncio.create_task(self._run_mandiri() if g.mandiri else self._run())
+        self.task = asyncio.create_task(self._run_mandiri() if self.mandiri else self._run())
 
     async def _run_instant(self, names: list[str], seed: int) -> None:
         codes = [s.code for s in self.seats]
@@ -373,12 +379,14 @@ class GameRoom:
             evs = [x for x in (self.game.event_for(self.state, e, viewer) for e in events) if x is not None] if events else events
             mine = self.seat_of(mem.id)
             my_turn = mine is not None and mine in self.pending and mine not in self.actions and self.status == "main"
-            dl = self.deadlines.get(mine, 0) if self.game.mandiri and mine is not None else self.deadline
+            dl = self.deadlines.get(mine, 0) if self.mandiri and mine is not None else self.deadline
             msgs.append(self._send(mem, {"type": "update", "view": view, "seat": p, "pending": self.pending,
                                          "acted": list(self.actions.keys()), "my_turn": my_turn,
                                          "deadline": dl, "now": time.time(), "step": self.step, "events": evs,
                                          "jeda": self._pause_msg(), "dijeda_sejak": self.paused_at or None,
-                                         "versi": self.vers.get(mine, 0) if self.game.mandiri and mine is not None else None}))
+                                         "versi": self.vers.get(mine, 0) if self.mandiri and mine is not None else None,
+                                         "mandiri": self.mandiri,
+                                         "tunggu": self.tunggu.get(mine, 0.0) if self.mandiri and mine is not None else 0.0}))
         await asyncio.gather(*msgs)
 
     def _bot_action(self, p: int) -> Any:
@@ -537,23 +545,46 @@ class GameRoom:
         finally:
             self.pause_until, self.ready = 0.0, set()
 
+    def _maybe_pause_mandiri(self, events: list[dict[str, Any]]) -> None:
+        """Mode mandiri juga punya jeda lihat hasil setelah event akhir ronde (misalnya kata Wordle terjawab semua)."""
+        pause = self._pause_len(events)
+        if pause > 0:
+            self.pause_until, self.ready = time.time() + pause, set()
+
     def _apply_mandiri(self, p: int, a: Any) -> list[dict[str, Any]]:
         self.step += 1
         self._log_step({p: a})
         events = self.game.apply(self.state, {p: a})
         self.vers[p] = self.vers.get(p, 0) + 1
+        cd = self.game.cooldown(self.state, p, events)
+        if cd > 0:
+            self.tunggu[p] = time.time() + cd
         return events
+
+    def _next_deadline(self, p: int, now: float) -> float:
+        """Batas waktu aksi berikutnya: waktu penuh dihitung setelah hukuman tunggu selesai."""
+        return max(now, self.tunggu.get(p, 0.0)) + self.waktu
 
     async def _run_mandiri(self) -> None:
         """Setiap pemain jalan sendiri (misalnya deck-builder): tidak menunggu pemain lain."""
         g, s = self.game, self.state
         next_bot: dict[int, float] = {}
         last_push = 0.0
+        self.dirty = True       # tampilan awal langsung dikirim (bot bisa saja baru beraksi beberapa detik lagi)
         try:
             while not g.over(s):
                 if self.paused_at:
                     await self._hold()
                     continue
+                if self.pause_until > 0:
+                    # jeda lihat hasil (akhir ronde): tunggu, lalu semua manusia mendapat waktu penuh lagi
+                    await self._push_state([])
+                    await self._wait_pause()
+                    now = time.time()
+                    self.tunggu = {}
+                    self.deadlines = {k: now + self.waktu for k in self.deadlines}
+                    next_bot = {k: now + max(self.jeda, g.jeda_bot(self.settings), 0.05) for k in next_bot}
+                    self.dirty = True
                 now = time.time()
                 pend = set(g.pending(s))
                 self.pending = sorted(pend)
@@ -561,19 +592,38 @@ class GameRoom:
                 for p in self.pending:
                     seat = self.seats[p]
                     if seat.kind == "bot":
-                        if now >= next_bot.get(p, 0):
+                        if p not in next_bot:
+                            next_bot[p] = now + g.jeda_bot(self.settings)
+                        if now >= next_bot[p] and now >= self.tunggu.get(p, 0.0):
                             changed += self._apply_mandiri(p, self._bot_action(p))
-                            next_bot[p] = now + max(self.jeda, 0.05)
+                            next_bot[p] = max(now + max(self.jeda, g.jeda_bot(self.settings), 0.05), self.tunggu.get(p, 0.0))
+                            if self._pause_len(changed) > 0:
+                                break
                     else:
                         if p not in self.deadlines:
                             self.deadlines[p] = now + self.waktu
                         owner = self.members.get(seat.owner)
                         offline = owner is None or not owner.online
                         if now >= self.deadlines[p] or (offline and now - self.deadlines[p] + self.waktu > 2):
-                            changed += [{"jenis": "waktu_habis", "pemain": [s["names"][p]]}] + self._apply_mandiri(p, g.default(s, p))
-                            self.deadlines[p] = now + self.waktu
+                            d = self.drafts.pop(p, None)
+                            if d is not None:
+                                try:
+                                    d = g.validate(s, p, d)
+                                except (ActionError, TypeError, ValueError):
+                                    d = None
+                            if d is not None:      # pilihan yang terlihat di layar dikirim otomatis
+                                changed += [{"jenis": "waktu_habis", "pemain": [], "otomatis": [s["names"][p]]}] + self._apply_mandiri(p, d)
+                            else:
+                                changed += [{"jenis": "waktu_habis", "pemain": [s["names"][p]]}] + self._apply_mandiri(p, g.default(s, p))
+                            self.deadlines[p] = self._next_deadline(p, now)
                 if changed:
                     self._record(changed)
+                    self._maybe_pause_mandiri(changed)
+                if self.pause_until > 0 and changed:
+                    last_push = now
+                    self.dirty = False
+                    await self._push_state(changed)
+                    continue
                 if (changed or self.dirty) and now - last_push > 0.25:
                     last_push = now
                     self.dirty = False
@@ -595,7 +645,7 @@ class GameRoom:
             await self.push_lobby()
 
     def _expected_step(self, p: int) -> int:
-        return self.vers.get(p, 0) if self.game.mandiri else self.step
+        return self.vers.get(p, 0) if self.mandiri else self.step
 
     def _check_step(self, p: int, step: Any) -> bool:
         """True kalau pesan klien dibuat untuk langkah yang sedang berjalan (atau klien lama tanpa nomor langkah)."""
@@ -619,18 +669,28 @@ class GameRoom:
         if not self._check_step(p, step):
             raise RoomError("Terlambat: waktu langkah itu sudah habis, jawabanmu tidak dihitung. Pilih lagi untuk langkah ini.",
                             kode="telat")
-        if p not in self.game.pending(self.state) or (not self.game.mandiri and p not in self.pending):
+        if self.mandiri and self.pause_until > 0:
+            raise RoomError("Tunggu, hasil ronde sedang ditampilkan.")
+        if self.mandiri and time.time() < self.tunggu.get(p, 0.0):
+            sisa = self.tunggu[p] - time.time()
+            raise RoomError(f"Tunggu {max(1, round(sisa))} detik lagi (hukuman tebakan salah).", kode="tunggu")
+        if p not in self.game.pending(self.state) or (not self.mandiri and p not in self.pending):
             raise RoomError("Belum giliranmu." if self.pause_until <= 0 else "Tunggu, hasil ronde sedang ditampilkan.")
         try:
             a = self.game.validate(self.state, p, action)
         except ActionError as e:
             raise RoomError(str(e)) from None
-        if self.game.mandiri:
+        if self.mandiri:
+            self.drafts.pop(p, None)
             events = self._apply_mandiri(p, a)
-            self.deadlines[p] = time.time() + self.waktu
+            self.deadlines[p] = self._next_deadline(p, time.time())
             self._record(events)
+            self._maybe_pause_mandiri(events)
             self.dirty = True
-            await self._push_state(events, only={m.id})
+            if self.pause_until > 0:
+                await self._push_state(events)          # akhir ronde: semua langsung melihat hasilnya
+            else:
+                await self._push_state(events, only={m.id})
             self.wake.set()
             return
         changed = p in self.actions
@@ -643,7 +703,7 @@ class GameRoom:
 
     async def retract(self, m: Member, step: Any = None) -> None:
         """Tarik kembali jawaban (tombol "Ubah") selama ronde belum ditutup."""
-        if self.status != "main" or self.state is None or self.game.mandiri:
+        if self.status != "main" or self.state is None or self.mandiri:
             return
         p = self.seat_of(m.id)
         if p is None or p not in self.pending or not self._check_step(p, step) or p not in self.actions:
@@ -654,10 +714,15 @@ class GameRoom:
 
     def draft(self, m: Member, action: Any, step: Any = None) -> None:
         """Pilihan yang sedang terlihat di layar pemain (belum menekan kirim). Dipakai otomatis kalau waktunya habis."""
-        if self.status != "main" or self.state is None or self.game.mandiri:
+        if self.status != "main" or self.state is None:
             return
         p = self.seat_of(m.id)
-        if p is None or p not in self.pending or p in self.actions or not self._check_step(p, step):
+        if p is None or not self._check_step(p, step):
+            return
+        if self.mandiri:
+            if p not in self.game.pending(self.state):
+                return
+        elif p not in self.pending or p in self.actions:
             return
         try:
             self.drafts[p] = self.game.validate(self.state, p, action)
@@ -691,6 +756,8 @@ class GameRoom:
             self.turn_start += d
             for k in self.deadlines:
                 self.deadlines[k] += d
+            for k in self.tunggu:
+                self.tunggu[k] += d
             self.paused_at = 0.0
         else:
             self.paused_at = now
@@ -749,10 +816,11 @@ class GameRoom:
 
 
 class ArenaManager:
-    def __init__(self, pool=None, on_finish=None):
+    def __init__(self, pool=None, on_finish=None, room_empty: float = 120.0):
         self.rooms: dict[str, GameRoom] = {}
         self.pool = pool
         self.on_finish = on_finish
+        self.room_empty = room_empty            # room tanpa satu pun anggota online dihapus setelah sekian detik
         self.replays: OrderedDict[str, dict[str, Any]] = OrderedDict()   # match terakhir (untuk replay sudut pandang)
 
     def add_replay(self, data: dict[str, Any]) -> str:
@@ -791,12 +859,37 @@ class ArenaManager:
             raise RoomError("Room tidak ditemukan. Cek lagi kodenya.")
         return room
 
-    def cleanup(self) -> None:
-        now = time.time()
+    def remove(self, code: str) -> GameRoom | None:
+        """Hapus room dari memori: hentikan match yang berjalan dan lepaskan semua koneksi."""
+        r = self.rooms.pop(code, None)
+        if r is not None:
+            self.shutdown(r)
+        return r
+
+    @staticmethod
+    def shutdown(r: GameRoom) -> None:
+        r.deleted = True
+        r.status = "dihapus"
+        if r.task:
+            r.task.cancel()
+        for m in r.members.values():
+            m.send, m.kick, m.online = None, None, False
+        r.state, r.frames, r.recent = None, [], []
+
+    def cleanup(self, now: float | None = None) -> list[str]:
+        """Hapus room yang tidak punya satu pun anggota online lebih lama dari ``room_empty`` detik
+        (match yang sedang berjalan ikut dihentikan), dan room lobby yang ditinggal diam lebih dari 3 jam."""
+        now = time.time() if now is None else now
+        gone = []
         for code, r in list(self.rooms.items()):
             online = any(m.online for m in r.members.values())
-            idle = now - r.last
-            if (not online and idle > 900) or (r.status != "main" and idle > 3 * 3600):
-                if r.task:
-                    r.task.cancel()
-                self.rooms.pop(code, None)
+            if online:
+                r.empty_since = 0.0
+            elif not r.empty_since:
+                # sejak anggota terakhir putus (kalau tercatat), supaya masa tunggu tidak tergantung jadwal bersih-bersih
+                r.empty_since = max([m.offline_since for m in r.members.values() if m.offline_since > 0] or [now])
+            kosong = not online and now - r.empty_since >= self.room_empty
+            if kosong or (r.status != "main" and now - r.last > 3 * 3600):
+                self.remove(code)
+                gone.append(code)
+        return gone

@@ -57,7 +57,7 @@ def play_sync(game_id: str, cfg: dict[str, Any], names: list[str], codes: list[s
         if not pend:
             break
         step += 1
-        if g.mandiri:
+        if g.is_mandiri(cfg):
             events = []
             for p in pend:
                 a = bots[p].act(g, s, p, step, limits)
@@ -84,9 +84,10 @@ def sudut_sync(game_id: str, cfg: dict[str, Any], names: list[str], seed: int, l
     def view() -> dict[str, Any]:
         return copy.deepcopy(g.public(s) if kursi < 0 else g.observe(s, kursi))
 
+    viewer = kursi if kursi >= 0 else None
     frames = [{"step": 0, "view": view(), "events": []}]
     for k, entry in enumerate(langkah, start=1):
         actions = {int(p): a for p, a in entry.items()}
-        events = g.apply(s, actions)
+        events = [x for x in (g.event_for(s, e, viewer) for e in g.apply(s, actions)) if x is not None]
         frames.append({"step": k, "view": view(), "events": events})
     return thin_frames(frames, g.max_frames)

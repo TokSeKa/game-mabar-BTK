@@ -204,7 +204,7 @@ class Conn:
                 await self.send(svc.race_board(room))
                 if room.status == "done":
                     await self.send({"type": "summary", "mode": "balapan", **svc.summary(room.view, tr), "board": room.results or []})
-        elif t in ("race_start", "race_pause", "race_resume", "race_speed", "race_leave"):
+        elif t in ("race_start", "race_pause", "race_resume", "race_speed", "race_leave", "race_delete"):
             await self.race(t, msg)
         else:
             raise GameError("Perintah tidak dikenal.")
@@ -223,6 +223,8 @@ class Conn:
     def _ctx(self):
         if self.sess is not None:
             return self.sess.view, self.sess.trader
+        if self.room is not None and self.svc.rooms.get(self.room.code) is not self.room:
+            raise GameError("Room balapan ini sudah dihapus.")
         if self.room is not None and self.room.view is not None:
             return self.room.view, self.tr
         raise GameError("Sesi belum dimulai.")
@@ -264,6 +266,10 @@ class Conn:
 
     async def race(self, t: str, msg: dict[str, Any]) -> None:
         svc, room, tr = self.svc, self.room, self.tr
+        if room is not None and svc.rooms.get(room.code) is not room:
+            self.room = self.tr = None                    # room sudah dihapus host / bersih-bersih otomatis
+            await self.send({"type": "race_deleted", "by": None})
+            return
         if room is None or tr is None:
             raise GameError("Kamu belum masuk room balapan.")
         if t == "race_leave":
@@ -279,6 +285,12 @@ class Conn:
             return
         if tr.id != room.host_id:
             raise GameError("Hanya host yang bisa mengatur balapan.")
+        if t == "race_delete":
+            svc.rooms.pop(room.code, None)             # hilang dari daftar dulu: tidak ada yang bisa masuk lagi
+            await svc.race_broadcast(room, {"type": "race_deleted", "by": tr.name})
+            svc.shutdown_room(room)
+            self.room = self.tr = None
+            return
         if t == "race_start":
             await svc.race_start(room, tr)
             return

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { load, save } from '../storage';
 import type { GameMeta, PresetMeta, SettingMeta } from './hubApi';
+import { KartuEditor } from './KartuEditor';
 
 const GRUP: [SettingMeta['grup'], string, string][] = [
   ['dasar', 'Dasar', ''],
@@ -18,7 +19,15 @@ export function settingVisible(st: SettingMeta, values: Record<string, any>): bo
   if (!st.jika) return true;
   return Object.entries(st.jika).every(([k, want]) => {
     const v = values[k];
-    return Array.isArray(want) ? want.includes(v) : v === want;
+    if (Array.isArray(want)) return want.includes(v);
+    if (want && typeof want === 'object') {
+      // {"min": 1} = angka minimal sekian, {"bukan": x} = selain nilai itu
+      const w = want as { min?: number; bukan?: unknown };
+      if (w.min != null && !(Number(v) >= w.min)) return false;
+      if ('bukan' in w && v === w.bukan) return false;
+      return true;
+    }
+    return v === want;
   });
 }
 
@@ -49,6 +58,7 @@ export function matchingPreset(meta: GameMeta, values: Record<string, any>): str
 }
 
 function shown(st: SettingMeta, v: any): string {
+  if (st.jenis === 'kartu') return Array.isArray(v) && v.length ? `${v.length} kartu: ${v.map((k: any) => `${k.simbol} ${k.nama}`).join(', ')}` : 'tidak ada';
   if (st.jenis === 'bool') return v ? 'ya' : 'tidak';
   if (st.jenis === 'pilihan') return st.pilihan?.find((p) => p[0] === v)?.[1] ?? String(v);
   if (typeof v === 'number') return v.toLocaleString('id-ID', { maximumFractionDigits: 3 });
@@ -128,7 +138,14 @@ export function SettingsForm({ meta, values, onChange, disabled }: {
             <summary>{label}{changed > 0 && <span className="tag-mini host">{changed} diubah</span>}</summary>
             {ket && <p className="hint">{ket}</p>}
             <div className="fields">
-              {list.map((st) => (
+              {list.map((st) => st.jenis === 'kartu' ? (
+                <div key={st.id} className={`field set-field wide ${!same(values[st.id] ?? st.default, st.default) ? 'changed' : ''}`}>
+                  <span>{st.label}</span>
+                  <KartuEditor gid={meta.id} value={(values[st.id] ?? st.default) as any[]} contoh={meta.contoh_kustom ?? []} disabled={disabled}
+                    onChange={(v) => onChange({ ...values, [st.id]: v })} />
+                  {st.ket && <small className="hint">{st.ket}</small>}
+                </div>
+              ) : (
                 <Field key={st.id} st={st} val={values[st.id] ?? st.default} disabled={disabled}
                   onChange={(v) => onChange({ ...values, [st.id]: v })} />
               ))}

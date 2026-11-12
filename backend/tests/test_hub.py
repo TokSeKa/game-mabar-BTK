@@ -85,10 +85,13 @@ def test_room_manusia_dan_bot_campur_dengan_penonton(client):
             ub = until(b, "update", pred=lambda m: m["my_turn"])
             b.send_json({"type": "aksi", "aksi": "abc"})
             assert "angka" in until(b, "error")["message"]
+            if ronde == 2:
+                # reaksi dikirim sebelum jawaban terakhir: kalau sesudahnya, 'selesai' bisa datang lebih dulu dan
+                # until(a, "reaksi") ikut menelan pesan 'selesai' (tes jadi menggantung)
+                tv.send_json({"type": "reaksi", "emoji": "🔥"})
+                r = until(a, "reaksi")
+                assert r == {"type": "reaksi", "nama": "Tono", "emoji": "🔥"}
             b.send_json({"type": "aksi", "aksi": 10})
-        tv.send_json({"type": "reaksi", "emoji": "🔥"})
-        r = until(a, "reaksi")
-        assert r == {"type": "reaksi", "nama": "Tono", "emoji": "🔥"}
         fin = until(a, "selesai")
         assert fin["names"] == ["Ani", "Budi", "Robo"] and fin["kinds"] == ["manusia", "manusia", "bot"]
         assert len(fin["frames"]) == 3

@@ -122,11 +122,12 @@ def create_app(cfg: Config = default_config, trading: "TradingService | None" = 
     practice_slots = asyncio.Semaphore(cfg.practice_concurrency)
 
     async def cleanup_loop() -> None:
+        # sering dicek supaya room yang sudah kosong cepat dibuang dari memori
         while True:
-            await asyncio.sleep(60)
+            await asyncio.sleep(min(20, max(5, cfg.room_idle_seconds / 3)))
             try:
                 await manager.cleanup()
-                trading.cleanup()
+                trading.cleanup(room_empty=cfg.room_idle_seconds)
                 arena.cleanup()
             except Exception:  # noqa: BLE001
                 log.exception("cleanup gagal")
@@ -273,7 +274,7 @@ def create_app(cfg: Config = default_config, trading: "TradingService | None" = 
                 await manager.disconnect(room, player, send)
 
     mount_trading(app, trading)
-    arena = mount_arena(app, pool=runner.executor, db=trading.db)
+    arena = mount_arena(app, pool=runner.executor, db=trading.db, room_empty=cfg.room_idle_seconds)
 
     # ------------------------------------------------------------ frontend
     if cfg.static_dir.is_dir():

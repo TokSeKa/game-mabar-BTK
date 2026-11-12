@@ -55,6 +55,11 @@ class LelangRahasia(Game):
         Setting("hangus_persen", "Koin seri ikut hangus (%)", "int", 0, 0, 100, grup="aturan",
                 ket="Kalau tawaran tertinggi seri, barang hangus DAN para penawar seri itu kehilangan sekian persen tawarannya."),
         Setting("koin_ronde", "Koin tambahan tiap ronde", "int", 0, 0, 1000, grup="aturan", ket="Semua pemain dapat koin ini setelah setiap lelang."),
+        Setting("dividen_persen", "Dividen poin (%)", "int", 0, 0, 100, grup="aturan",
+                ket="Poin barang yang kamu miliki menghasilkan koin: setiap pembayaran dividen kamu dapat sekian persen dari poinmu "
+                    "(misalnya 20 poin × 10% = 2 koin). Pecahan koin disimpan dan dibayar di pembayaran berikutnya. 0 = mati."),
+        Setting("dividen_tiap", "Dividen dibayar tiap (ronde)", "int", 2, 1, 10, grup="aturan", jika={"dividen_persen": {"min": 1}},
+                ket="Dividen dibayar setelah lelang ronde ke-N, ke-2N, dan seterusnya."),
         Setting("barang_minus", "Barang minus", "int", 0, 0, 10, grup="kejutan",
                 ket="Jumlah barang kutukan (nilai −1 sampai −8) di jadwal. Tidak ada yang membayar barang minus; poin minusnya kena ke "
                     "penawar TERTINGGI dan TERENDAH, plus yang di TENGAH kalau jumlah pemain ganjil dan lebih dari 3."),
@@ -68,6 +73,8 @@ class LelangRahasia(Game):
          "nilai": {"lihat_depan": 0, "nilai_mode": "taksiran", "koin_rahasia": True, "buka_tawaran": "pemenang"}},
         {"id": "kacau", "nama": "Kacau", "ket": "Barang minus, koin seri hangus 50%, bonus set, dan jadwal hanya terlihat 2 barang ke depan.",
          "nilai": {"lihat_depan": 2, "barang_minus": 3, "hangus_persen": 50, "bonus_set": 8}},
+        {"id": "dividen", "nama": "Investor", "ket": "Poin barang menghasilkan dividen 10% tiap 2 ronde: barang yang dibeli awal ikut membiayai lelang berikutnya.",
+         "nilai": {"dividen_persen": 10, "dividen_tiap": 2}},
     ]
     aturan = """
 - Ada sejumlah **barang** (default 12) yang dilelang satu per satu. Default: **nilai poin semua barang sudah diumumkan dari awal** (1–10).
@@ -80,6 +87,9 @@ class LelangRahasia(Game):
   **tertinggi** dan **terendah** (semua yang seri di ujung ikut kena), plus penawar **tengah** kalau jumlah pemain ganjil dan lebih dari 3.
   Kalau semua menawar sama, semua kena. Jadi tawaran barang minus adalah soal posisi: jangan di ujung, jangan di tengah.
 - **Bonus set** (kalau diaktifkan): setiap 3 barang dari kategori yang sama (Pusaka, Seni, Kriya, Harta) memberi bonus poin.
+- **Dividen** (kalau diaktifkan): setiap *N* ronde, poin barang + bonus set yang kamu miliki menghasilkan koin sebesar *X%* (misalnya 20 poin ×
+  10% = 2 koin). Pecahan koin disimpan untuk pembayaran berikutnya, dan poin negatif tidak menghasilkan apa-apa. Jadi barang yang dibeli
+  lebih awal bukan cuma poin diam: ia ikut membiayai tawaranmu berikutnya.
 - Skor akhir = poin barang + bonus set + koin sisa × *poin per koin sisa* (default 0,1).
 """
     format_aksi = "Satu angka bulat 0 sampai koinmu, misalnya `25`."
@@ -94,6 +104,9 @@ class LelangRahasia(Game):
   "riwayat": [ {"ronde": 1, "nama": "Batik Tulis", "nilai": 5, "minus": False, "tawaran": {"Budi": 30, "Ani": 20},
                 "pemenang": "Budi", "harga": 30, "hangus": False, "kena_minus": []} ] }
 ```
+- `dividen_persen`, `dividen_tiap`, `dividen_ronde` (ronde yang setelah lelangnya dividen dibayar, None kalau mati) dan
+  `dividen_saya` (perkiraan koin dividenmu di pembayaran berikutnya kalau poinmu tetap) ada di info. Riwayat ronde pembayaran berisi
+  `dividen` = {nama: koin}.
 - `tawaran` di riwayat bisa `None` (hanya pemenang yang dibuka) dan `harga` bisa `None` (hanya nama pemenang).
 - Barang minus: `minus` True, `kena_minus` berisi pemain yang kena poin minus."""
     lib_docs = [
@@ -101,6 +114,7 @@ class LelangRahasia(Game):
         {"nama": "nilai_sekarang", "jenis": "fungsi", "tanda": "nilai_sekarang()", "ket": "Nilai barang yang sedang dilelang menurut yang kamu lihat (pasti/taksiran), atau None kalau rahasia."},
         {"nama": "nilai_tersisa", "jenis": "fungsi", "tanda": "nilai_tersisa(tebakan=5)", "ket": "Jumlah nilai barang positif dari ronde ini sampai akhir; barang yang belum terlihat dihitung sebesar `tebakan`."},
         {"nama": "kemungkinan_minus", "jenis": "fungsi", "tanda": "kemungkinan_minus()", "ket": "True kalau barang sekarang terlihat bernilai minus (barang kutukan)."},
+        {"nama": "sisa_pembayaran_dividen", "jenis": "fungsi", "tanda": "sisa_pembayaran_dividen()", "ket": "Berapa kali lagi dividen dibayar dari ronde ini sampai akhir (termasuk setelah ronde ini). 0 kalau dividen mati."},
     ]
     templates = [
         {"id": "proporsional", "nama": "Proporsional", "ket": "Menawar sebanding nilai barang dibanding total nilai yang tersisa. Barang minus: menawar di posisi tengah-bawah.", "kode": '''def aksi():
@@ -138,12 +152,25 @@ class LelangRahasia(Game):
             return terkaya + 1
     return min(koin, nilai * 3)
 '''},
+        {"id": "investor", "nama": "Investor Awal", "ket": "Kalau dividen aktif, barang yang dibeli awal dihargai lebih tinggi karena masih akan menghasilkan koin berkali-kali.", "kode": '''def aksi():
+    i = info()
+    koin = koin_saya()
+    if kemungkinan_minus():
+        return min(koin, 1 + saya())
+    nilai = nilai_sekarang()
+    if nilai == None:
+        nilai = 5
+    # tiap poin menghasilkan (persen/100) koin di setiap pembayaran yang tersisa
+    hasil = nilai * i["dividen_persen"] / 100 * sisa_pembayaran_dividen()
+    bobot = (nilai + hasil) / max(1, nilai_tersisa())
+    return min(koin, int(koin * bobot * 1.3))
+'''},
     ]
 
     # ------------------------------------------------------------ jadwal
     def init(self, cfg, names, seed):
         s = {"seed": seed, "names": names, "cfg": cfg, "ronde": 1, "koin": [cfg["modal"]] * len(names),
-             "poin": [0] * len(names), "riwayat": [], "koleksi": [{} for _ in names]}
+             "poin": [0] * len(names), "riwayat": [], "koleksi": [{} for _ in names], "dividen_sisa": [0.0] * len(names)}
         g = rng(s, "barang")
         nama = BARANG[:]
         g.shuffle(nama)
@@ -202,6 +229,18 @@ class LelangRahasia(Game):
         b = s["cfg"]["bonus_set"]
         return sum(cnt // 3 for cnt in s["koleksi"][p].values()) * b if b > 0 else 0
 
+    def _dividend_round(self, s):
+        """Ronde berikutnya (mulai ronde ini) yang setelah lelangnya dividen dibayar, atau None."""
+        c = s["cfg"]
+        if c.get("dividen_persen", 0) <= 0:
+            return None
+        k = c.get("dividen_tiap", 2)
+        r = ((s["ronde"] + k - 1) // k) * k
+        return r if r <= c["barang"] else None
+
+    def _dividend_base(self, s, p):
+        return max(0, s["poin"][p] + self._set_bonus(s, p))
+
     def _view(self, s, viewer):
         c, r, n = s["cfg"], s["ronde"], s["names"]
         total = c["barang"]
@@ -221,6 +260,11 @@ class LelangRahasia(Game):
                 "nilai_mode": c["nilai_mode"], "lihat_depan": c["lihat_depan"], "buka_tawaran": c["buka_tawaran"],
                 "koin_rahasia": c["koin_rahasia"], "bonus_set": c["bonus_set"], "ada_minus": c["barang_minus"] > 0,
                 "koleksi": {n[i]: dict(s["koleksi"][i]) for i in range(len(n))},
+                "dividen_persen": c.get("dividen_persen", 0), "dividen_tiap": c.get("dividen_tiap", 2),
+                "dividen_ronde": self._dividend_round(s),
+                "dividen_saya": (math.floor(s.get("dividen_sisa", [0.0] * len(n))[viewer]
+                                            + self._dividend_base(s, viewer) * c.get("dividen_persen", 0) / 100)
+                                 if isinstance(viewer, int) and c.get("dividen_persen", 0) > 0 else None),
                 "riwayat": [self._entry_for(s, e, viewer) for e in s["riwayat"]]}
 
     def event_for(self, s, e, viewer):
@@ -294,9 +338,22 @@ class LelangRahasia(Game):
                         entry["hangus_koin"][n[i]] = burn
         if c["koin_ronde"] > 0:
             s["koin"] = [k + c["koin_ronde"] for k in s["koin"]]
+        events = []
+        pct, tiap = c.get("dividen_persen", 0), c.get("dividen_tiap", 2)
+        if pct > 0 and r % tiap == 0:
+            sisa = s.setdefault("dividen_sisa", [0.0] * len(n))
+            bayar = {}
+            for i in range(len(n)):
+                total = sisa[i] + self._dividend_base(s, i) * pct / 100
+                koin = math.floor(total + 1e-9)
+                sisa[i] = round(total - koin, 6)
+                s["koin"][i] += koin
+                bayar[n[i]] = koin
+            entry["dividen"] = bayar
+            events.append({"jenis": "dividen", "ronde": r, "persen": pct, "bayar": bayar})
         s["riwayat"].append(entry)
         s["ronde"] += 1
-        return [{"jenis": "lelang", **entry}]
+        return [{"jenis": "lelang", **entry}] + events
 
     def over(self, s):
         return s["ronde"] > s["cfg"]["barang"]
@@ -315,5 +372,13 @@ class LelangRahasia(Game):
             v = obs["barang"]["nilai"] if obs["barang"] else None
             return v is not None and v < 0
 
+        def sisa_pembayaran_dividen():
+            c = s["cfg"]
+            if c.get("dividen_persen", 0) <= 0:
+                return 0
+            k = c.get("dividen_tiap", 2)
+            return c["barang"] // k - (s["ronde"] - 1) // k
+
         return {"koin_saya": lambda: s["koin"][p], "nilai_sekarang": lambda: obs["barang"]["nilai"] if obs["barang"] else None,
-                "nilai_tersisa": nilai_tersisa, "kemungkinan_minus": kemungkinan_minus}
+                "nilai_tersisa": nilai_tersisa, "kemungkinan_minus": kemungkinan_minus,
+                "sisa_pembayaran_dividen": sisa_pembayaran_dividen}

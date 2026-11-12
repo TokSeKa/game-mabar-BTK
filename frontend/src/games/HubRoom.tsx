@@ -208,6 +208,11 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
           sess.current = null;
           leave();
           break;
+        case 'room_dihapus':
+          clearSession();
+          sess.current = null;
+          leave(m.message ?? 'Room sudah dihapus.');
+          return;
         default:
           break;
       }
@@ -267,7 +272,7 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
   };
 
   const meta = lobby ? games[lobby.game] : undefined;
-  mandiriRef.current = !!meta?.mandiri;
+  mandiriRef.current = !!(upd?.mandiri ?? lobby?.mandiri ?? meta?.mandiri);
   if (!lobby || !meta) {
     return (
       <div className="panel">
@@ -297,6 +302,12 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
           <div className="react-bar" role="group" aria-label="Kirim reaksi">
             {EMOJI.map((e) => <button key={e} type="button" onClick={() => send({ type: 'reaksi', emoji: e })} aria-label={`Reaksi ${e}`}>{e}</button>)}
           </div>
+          {me != null && lobby.host_id === me && (
+            <button type="button" className="btn small danger" title="Hapus room ini untuk semua orang"
+              onClick={() => window.confirm(lobby.status === 'main'
+                ? 'Hapus room ini sekarang? Match yang sedang berjalan dihentikan dan semua orang dikeluarkan.'
+                : 'Hapus room ini? Semua orang di room akan dikeluarkan.') && send({ type: 'hapus_room' })}>🗑️ Hapus room</button>
+          )}
           <button type="button" className="btn small danger" onClick={() => {
             if (lobby.status === 'main' && !window.confirm('Match sedang berjalan. Keluar sekarang? Kursimu akan memakai aksi bawaan. (Masuk lagi dengan nama yang sama untuk kembali ke kursimu.)')) return;
             if (!sock.current?.send({ type: 'keluar' })) {
@@ -627,11 +638,12 @@ function Live({ lobby, meta, me, start, upd, log, actedStep, done, offset, act, 
   if (!upd) return <div className="panel running-banner"><div className="spinner" /> Menunggu langkah pertama…</div>;
 
   const R = rendererFor(meta.id);
+  const mandiri = !!(upd.mandiri ?? lobby.mandiri ?? meta.mandiri);
   const mySeat = upd.seat ?? -1;
-  const acted = !meta.mandiri && mine && upd.pending.includes(mySeat) && (actedStep === upd.step || (upd.acted ?? []).includes(mySeat));
+  const acted = !mandiri && mine && upd.pending.includes(mySeat) && (actedStep === upd.step || (upd.acted ?? []).includes(mySeat));
   const total = lobby.waktu;
   const doneSeats = new Set([...(upd.acted ?? []), ...(done.step === upd.step ? done.seats : [])]);
-  const waiting = meta.mandiri ? [] : upd.pending.filter((p) => !doneSeats.has(p)).map((p) => names[p]);
+  const waiting = mandiri ? [] : upd.pending.filter((p) => !doneSeats.has(p)).map((p) => names[p]);
   const jeda = upd.jeda;
   const sisaJeda = jeda ? Math.max(0, jeda.sampai - (paused ? upd.dijeda_sejak! : serverNow)) : 0;
   const siapSeats = new Set([...(jeda?.siap ?? []), ...(siap.step === upd.step ? siap.seats : [])]);
@@ -655,10 +667,10 @@ function Live({ lobby, meta, me, start, upd, log, actedStep, done, offset, act, 
       )}
       {(isHost || mySent || timeUp) && (
         <div className="live-bar row">
-          {mySent && !meta.mandiri && (
+          {mySent && !mandiri && (
             <span className="sent-chip">✅ Jawabanmu: <b>{describeAction(mySent.aksi)}</b></span>
           )}
-          {mySent && !meta.mandiri && upd.pending.includes(mySeat) && !jeda && !timeUp && (
+          {mySent && !mandiri && upd.pending.includes(mySeat) && !jeda && !timeUp && (
             <button type="button" className="btn small" onClick={ubah}>✏️ Ubah</button>
           )}
           {timeUp && upd.pending.includes(mySeat) && !acted && <span className="hint">⏳ Waktu habis, pilihan di layarmu dikirim otomatis…</span>}
@@ -684,7 +696,8 @@ function Live({ lobby, meta, me, start, upd, log, actedStep, done, offset, act, 
         </div>
       )}
       <R view={upd.view} meta={meta} names={names} me={upd.seat} canAct={canAct} acted={acted} replay={false} events={upd.events}
-        settings={lobby.settings} pending={upd.pending} act={act} draft={draft} />
+        settings={lobby.settings} pending={upd.pending} act={act} draft={draft}
+        tunggu={upd.tunggu ? Math.max(0, upd.tunggu - (paused ? upd.dijeda_sejak! : serverNow)) : 0} />
       <div className="live-foot">
         {waiting.length > 0 && <span className="hint">Menunggu: {waiting.join(', ')}</span>}
         <ActiveRules meta={meta} values={lobby.settings} />

@@ -18,6 +18,9 @@ Pemain: 2–8. Fungsi wajib: `def aksi():`.
   **tertinggi** dan **terendah** (semua yang seri di ujung ikut kena), plus penawar **tengah** kalau jumlah pemain ganjil dan lebih dari 3.
   Kalau semua menawar sama, semua kena. Jadi tawaran barang minus adalah soal posisi: jangan di ujung, jangan di tengah.
 - **Bonus set** (kalau diaktifkan): setiap 3 barang dari kategori yang sama (Pusaka, Seni, Kriya, Harta) memberi bonus poin.
+- **Dividen** (kalau diaktifkan): setiap *N* ronde, poin barang + bonus set yang kamu miliki menghasilkan koin sebesar *X%* (misalnya 20 poin ×
+  10% = 2 koin). Pecahan koin disimpan untuk pembayaran berikutnya, dan poin negatif tidak menghasilkan apa-apa. Jadi barang yang dibeli
+  lebih awal bukan cuma poin diam: ia ikut membiayai tawaranmu berikutnya.
 - Skor akhir = poin barang + bonus set + koin sisa × *poin per koin sisa* (default 0,1).
 
 ## Aksi yang dikembalikan
@@ -37,6 +40,9 @@ Satu angka bulat 0 sampai koinmu, misalnya `25`.
   "riwayat": [ {"ronde": 1, "nama": "Batik Tulis", "nilai": 5, "minus": False, "tawaran": {"Budi": 30, "Ani": 20},
                 "pemenang": "Budi", "harga": 30, "hangus": False, "kena_minus": []} ] }
 ```
+- `dividen_persen`, `dividen_tiap`, `dividen_ronde` (ronde yang setelah lelangnya dividen dibayar, None kalau mati) dan
+  `dividen_saya` (perkiraan koin dividenmu di pembayaran berikutnya kalau poinmu tetap) ada di info. Riwayat ronde pembayaran berisi
+  `dividen` = {nama: koin}.
 - `tawaran` di riwayat bisa `None` (hanya pemenang yang dibuka) dan `harga` bisa `None` (hanya nama pemenang).
 - Barang minus: `minus` True, `kena_minus` berisi pemain yang kena poin minus.
 
@@ -53,6 +59,7 @@ Satu angka bulat 0 sampai koinmu, misalnya `25`.
 | `nilai_sekarang()` | Nilai barang yang sedang dilelang menurut yang kamu lihat (pasti/taksiran), atau None kalau rahasia. |
 | `nilai_tersisa(tebakan=5)` | Jumlah nilai barang positif dari ronde ini sampai akhir; barang yang belum terlihat dihitung sebesar `tebakan`. |
 | `kemungkinan_minus()` | True kalau barang sekarang terlihat bernilai minus (barang kutukan). |
+| `sisa_pembayaran_dividen()` | Berapa kali lagi dividen dibayar dari ronde ini sampai akhir (termasuk setelah ronde ini). 0 kalau dividen mati. |
 
 ## Pengaturan room (diatur host)
 
@@ -71,10 +78,12 @@ Pengaturan **Informasi** menyembunyikan sebagian `info()` (nilainya jadi `None` 
 | Aturan | Jenis lelang (`jenis`) | pertama | Semua bayar: semua penawar kehilangan tawarannya, tapi hanya yang tertinggi dapat barang. |
 | Aturan | Koin seri ikut hangus (%) (`hangus_persen`) | 0 | Kalau tawaran tertinggi seri, barang hangus DAN para penawar seri itu kehilangan sekian persen tawarannya. |
 | Aturan | Koin tambahan tiap ronde (`koin_ronde`) | 0 | Semua pemain dapat koin ini setelah setiap lelang. |
+| Aturan | Dividen poin (%) (`dividen_persen`) | 0 | Poin barang yang kamu miliki menghasilkan koin: setiap pembayaran dividen kamu dapat sekian persen dari poinmu (misalnya 20 poin × 10% = 2 koin). Pecahan koin disimpan dan dibayar di pembayaran berikutnya. 0 = mati. |
+| Aturan | Dividen dibayar tiap (ronde) (`dividen_tiap`) | 2 | Dividen dibayar setelah lelang ronde ke-N, ke-2N, dan seterusnya. |
 | Kejutan | Barang minus (`barang_minus`) | 0 | Jumlah barang kutukan (nilai −1 sampai −8) di jadwal. Tidak ada yang membayar barang minus; poin minusnya kena ke penawar TERTINGGI dan TERENDAH, plus yang di TENGAH kalau jumlah pemain ganjil dan lebih dari 3. |
 | Kejutan | Bonus koleksi set (`bonus_set`) | 0 | Setiap 3 barang dari kategori yang sama (Pusaka, Seni, Kriya, Harta) memberi bonus poin ini. 0 = mati. |
 
-**Preset:** *Jadwal Rahasia* (lihat_depan=0); *Lelang Gelap* (lihat_depan=0, nilai_mode=taksiran, koin_rahasia=True, buka_tawaran=pemenang); *Kacau* (lihat_depan=2, barang_minus=3, hangus_persen=50, bonus_set=8)
+**Preset:** *Jadwal Rahasia* (lihat_depan=0); *Lelang Gelap* (lihat_depan=0, nilai_mode=taksiran, koin_rahasia=True, buka_tawaran=pemenang); *Kacau* (lihat_depan=2, barang_minus=3, hangus_persen=50, bonus_set=8); *Investor* (dividen_persen=10, dividen_tiap=2)
 
 ## Bahasa bot (sama untuk semua game)
 
@@ -144,5 +153,24 @@ def aksi():
         if terkaya + 1 <= koin and terkaya + 1 <= nilai * 8:
             return terkaya + 1
     return min(koin, nilai * 3)
+```
+
+### Investor Awal
+
+Kalau dividen aktif, barang yang dibeli awal dihargai lebih tinggi karena masih akan menghasilkan koin berkali-kali.
+
+```python
+def aksi():
+    i = info()
+    koin = koin_saya()
+    if kemungkinan_minus():
+        return min(koin, 1 + saya())
+    nilai = nilai_sekarang()
+    if nilai == None:
+        nilai = 5
+    # tiap poin menghasilkan (persen/100) koin di setiap pembayaran yang tersisa
+    hasil = nilai * i["dividen_persen"] / 100 * sisa_pembayaran_dividen()
+    bobot = (nilai + hasil) / max(1, nilai_tersisa())
+    return min(koin, int(koin * bobot * 1.3))
 ```
 

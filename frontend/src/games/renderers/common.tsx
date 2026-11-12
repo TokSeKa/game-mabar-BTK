@@ -19,6 +19,8 @@ export interface RenderProps {
   events: any[];
   settings: Record<string, any>;
   pending: number[];
+  /** mode mandiri: sisa detik hukuman tunggu sebelum boleh beraksi lagi (misalnya tebakan salah di balapan) */
+  tunggu?: number;
 }
 
 export interface ScoreRow {

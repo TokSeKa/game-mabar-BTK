@@ -65,6 +65,10 @@ export function Race({ toast, initialCode = '' }: Props) {
         case 'race_left':
           leave();
           break;
+        case 'race_deleted':
+          toast(m.by ? `Room balapan dihapus oleh ${m.by}.` : 'Room balapan ini sudah dihapus.');
+          leave();
+          break;
         case 'error':
           if (!j) {
             if (!quiet) toast(m.message, true);
@@ -110,6 +114,10 @@ export function Race({ toast, initialCode = '' }: Props) {
             <span className="room-code">{state.code}</span>
             <button className="btn small" type="button" onClick={async () => toast((await copyText(link)) ? 'Link tersalin.' : link)}>Salin link</button>
             <span className="spacer" />
+            {isHost && (
+              <button className="btn small danger" type="button" title="Hapus room ini untuk semua pemain"
+                onClick={() => window.confirm('Hapus room balapan ini? Semua pemain akan dikeluarkan.') && conn?.send({ type: 'race_delete' })}>🗑️ Hapus room</button>
+            )}
             <button className="btn small danger" type="button" onClick={leave}>Keluar</button>
           </div>
           <p>

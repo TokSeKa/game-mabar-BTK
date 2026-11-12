@@ -165,6 +165,7 @@ class RaceRoom:
     created: float = field(default_factory=time.time)
     last: float = field(default_factory=time.time)
     results: list[dict[str, Any]] | None = None
+    empty_since: float = 0.0  # > 0: sejak kapan tidak ada pemain yang online
 
 
 class TradingService:
@@ -515,8 +516,20 @@ class TradingService:
         await self.race_broadcast(room, self.race_state(room))
 
     # ------------------------------------------------------------ bersih-bersih
-    def cleanup(self) -> None:
-        now = time.time()
+    def remove_room(self, code: str) -> None:
+        r = self.rooms.pop(code, None)
+        if r is not None:
+            self.shutdown_room(r)
+
+    @staticmethod
+    def shutdown_room(r: RaceRoom) -> None:
+        if r.task:
+            r.task.cancel()
+        for p in r.players.values():
+            p.send, p.online = None, False
+
+    def cleanup(self, room_empty: float = 120.0, now: float | None = None) -> None:
+        now = time.time() if now is None else now
         for sid, s in list(self.sessions.items()):
             idle = now - s.last
             if s.finished and idle > 1800:
@@ -526,7 +539,11 @@ class TradingService:
                     self.finish(s)  # percobaan yang ditinggal tetap dihitung
                 self.sessions.pop(sid, None)
         for code, r in list(self.rooms.items()):
-            if now - r.last > 3600 and (r.status in ("lobby", "done") or not any(p.online for p in r.players.values())):
-                if r.task:
-                    r.task.cancel()
-                self.rooms.pop(code, None)
+            online = any(p.online for p in r.players.values())
+            if online:
+                r.empty_since = 0.0
+            elif not r.empty_since:
+                r.empty_since = now
+            kosong = not online and now - r.empty_since >= room_empty   # tidak ada yang online: buang dari memori
+            if kosong or (now - r.last > 3600 and r.status in ("lobby", "done")):
+                self.remove_room(code)

@@ -4,7 +4,7 @@ Kumpulan game browser untuk dimainkan bareng teman, dalam satu server:
 
 | Game | Ringkasnya |
 |---|---|
-| **Arena Mabar** | 11 game main bareng: poker, tenggelamkan kapal, robot arena, deck-builder, tycoon, lelang, dan lainnya. Setiap kursi boleh **manusia atau bot**, dan boleh dicampur. |
+| **Arena Mabar** | 16 game main bareng: poker, tenggelamkan kapal, robot arena, deck-builder, tycoon, lelang, wordle, labirin, kartu gaya UNO, evolusi, juragan gaya Monopoli, dan lainnya. Setiap kursi boleh **manusia atau bot**, dan boleh dicampur. |
 | **Suit Bot Arena** | Program bot batu-gunting-kertas dengan blok ala Scratch atau Python, lalu adu dengan bot teman (2–8 pemain) sampai HP habis. Ada turnamen, mode event, debugger, dan liga. |
 | **Kilas Pasar** | Simulasi trading dengan candle **asli** kripto, saham IDX, dan saham US. Spot, **futures perpetual** (long/short + leverage), dan **margin + short** saham dengan aturan & fee sesuai pasarnya. Mode buta, indikator & alat gambar. Main sendiri, tantangan harian, atau balapan bareng teman. |
 
@@ -185,7 +185,7 @@ backend/app/
   games/
     base.py, runtime.py      kontrak game umum + menjalankan bot di sandbox yang sama
     rooms.py, api.py         room Arena Mabar (kursi manusia/bot, timer, penonton, reaksi), REST & WebSocket /ws/main
-    g_*.py, registry.py      11 game (poker, kapal, robot, kartu, tycoon, lelang, dst.)
+    g_*.py, registry.py      16 game (poker, kapal, robot, kartu, tycoon, lelang, wordle, labirin, dst.)
     guide.py, gen_docs.py    panduan bot markdown per game (python -m app.games.gen_docs → docs/bot/)
   trading/
     timeframes.py, store.py  format candle, agregasi multi-timeframe, katalog (memmap)

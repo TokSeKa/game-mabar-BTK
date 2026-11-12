@@ -326,3 +326,97 @@ def test_penonton_ikut_kabut_kecuali_host_membuka_semua(client):
         until(a, "selesai", limit=200)
     for w in (a, t):
         w.__exit__(None, None, None)
+
+
+def test_room_kosong_dihapus_otomatis_tapi_room_berpenghuni_tetap():
+    from app.games.rooms import ArenaManager
+
+    mgr = ArenaManager(room_empty=120)
+
+    async def scenario():
+        async def send(msg):
+            pass
+        a = mgr.create("duapertiga", {}, 20, 0)
+        ma = a.join("Ani", None, send, False)
+        b = mgr.create("lelang", {}, 20, 0)
+        b.join("Budi", None, send, False)
+        t0 = time.time()
+        ma.online, ma.send, ma.offline_since = False, None, t0           # anggota terakhir room A putus
+        assert mgr.cleanup(now=t0 + 60) == [] and a.code in mgr.rooms      # masih masa tunggu (refresh / layar mati)
+        ma.online = True                                                   # menyambung lagi: hitungan diulang
+        assert mgr.cleanup(now=t0 + 200) == []
+        ma.online, ma.offline_since = False, t0 + 200
+        gone = mgr.cleanup(now=t0 + 200 + 121)
+        assert gone == [a.code] and a.code not in mgr.rooms and a.deleted
+        assert b.code in mgr.rooms                                         # room yang masih ada orangnya tidak disentuh
+
+    run(scenario())
+
+
+def test_room_kosong_saat_match_berjalan_ikut_dihentikan(client):
+    a, masuk = _room_dua(client, waktu=30)
+    a.send_json({"type": "tambah_bot", "nama": "B1", "kode": BOT10})
+    until(a, "room", pred=lambda r: len(r["kursi"]) == 2)
+    a.send_json({"type": "mulai"})
+    until(a, "update", pred=lambda m: m["my_turn"])
+    a.__exit__(None, None, None)                                           # satu-satunya manusia menutup tab
+    mgr = client.app.state.arena
+    room = mgr.rooms[masuk["kode"]]
+    until_true = time.time() + 3
+    while any(m.online for m in room.members.values()) and time.time() < until_true:
+        time.sleep(0.05)
+    assert mgr.cleanup(now=time.time() + mgr.room_empty + 1) == [masuk["kode"]]
+    assert room.task is None or room.task.cancelled() or room.task.done() or room.status == "dihapus"
+    with client.websocket_connect("/ws/main") as c:
+        c.send_json({"type": "kembali", "kode": masuk["kode"], "member_id": masuk["member_id"], "token_anggota": masuk["token"]})
+        assert "tidak ditemukan" in until(c, "error")["message"]
+
+
+def test_host_menghapus_room(client):
+    a, masuk = _room_dua(client)
+    b = client.websocket_connect("/ws/main")
+    b.__enter__()
+    b.send_json({"type": "gabung", "kode": masuk["kode"], "nama": "Budi"})
+    until(b, "masuk")
+    until(a, "room", pred=lambda r: len(r["kursi"]) == 2)
+    b.send_json({"type": "hapus_room"})
+    assert "host" in until(b, "error")["message"]                           # bukan host: ditolak
+    a.send_json({"type": "hapus_room"})
+    dihapus = until(b, "room_dihapus")
+    assert dihapus["oleh"] == "Ani" and "Ani" in dihapus["message"]
+    assert masuk["kode"] not in client.app.state.arena.rooms
+    b.send_json({"type": "reaksi", "emoji": "👏"})                          # koneksi lama yang masih terbuka
+    assert until(b, "room_dihapus")["oleh"] is None
+    for w in (a, b):
+        w.__exit__(None, None, None)
+
+
+def test_orang_terakhir_keluar_dari_lobby_room_langsung_dihapus(client):
+    a, masuk = _room_dua(client)
+    a.send_json({"type": "keluar"})
+    until(a, "keluar_ok")
+    assert masuk["kode"] not in client.app.state.arena.rooms
+    a.__exit__(None, None, None)
+
+
+def test_wordle_balapan_hukuman_tebakan_salah(client):
+    a = client.websocket_connect("/ws/main")
+    a.__enter__()
+    a.send_json({"type": "buat", "game": "wordle", "nama": "Ani", "settings": {"ronde": 1, "hukuman_detik": 1}, "waktu": 30, "jeda_hasil": 0})
+    until(a, "masuk")
+    a.send_json({"type": "mulai"})
+    u = until(a, "update", pred=lambda m: m["my_turn"])
+    assert u["mandiri"] is True and u["tunggu"] == 0
+    a.send_json({"type": "aksi", "aksi": "kucing", "step": u["versi"]})
+    assert "5 huruf" in until(a, "error")["message"]                       # ditolak: tidak memakan baris, tanpa hukuman
+    salah = "tanah" if u["view"]["jawaban"] != "tanah" else "rumah"
+    a.send_json({"type": "aksi", "aksi": salah, "step": u["versi"]})
+    u2 = until(a, "update", pred=lambda m: m["versi"] == 1)
+    assert u2["tunggu"] > u2["now"] and u2["deadline"] > u2["tunggu"] + 29
+    a.send_json({"type": "aksi", "aksi": "sinar", "step": 1})
+    e = until(a, "error")
+    assert e["kode"] == "tunggu" and "hukuman" in e["message"]
+    time.sleep(1.1)
+    a.send_json({"type": "aksi", "aksi": "sinar", "step": 1})
+    assert until(a, "update", pred=lambda m: m["versi"] == 2)["view"]["papan"]["Ani"]["baris"][-1]["kata"] == "sinar"
+    a.__exit__(None, None, None)

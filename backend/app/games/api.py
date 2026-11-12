@@ -29,6 +29,11 @@ class CodeIn(BaseModel):
     kode: str = Field(max_length=20_000)
 
 
+class KustomIn(BaseModel):
+    game: str = Field(max_length=40)
+    item: dict[str, Any] = Field(default_factory=dict)
+
+
 class LatihanIn(BaseModel):
     game: str = Field(max_length=40)
     kode: str = Field(max_length=20_000)
@@ -59,8 +64,8 @@ def make_on_finish(db):
     return on_finish
 
 
-def mount(app: FastAPI, pool=None, db=None) -> ArenaManager:
-    mgr = ArenaManager(pool=pool, on_finish=make_on_finish(db))
+def mount(app: FastAPI, pool=None, db=None, room_empty: float = 120.0) -> ArenaManager:
+    mgr = ArenaManager(pool=pool, on_finish=make_on_finish(db), room_empty=room_empty)
     r = APIRouter()
 
     @r.get("/api/main/games")
@@ -84,6 +89,15 @@ def mount(app: FastAPI, pool=None, db=None) -> ArenaManager:
             return {"ok": True, "error": None}
         except BotError as e:
             return {"ok": False, "error": e.to_dict()}
+
+    @r.post("/api/main/kustom/cek")
+    async def cek_kustom(body: KustomIn) -> dict[str, Any]:
+        """Cek isian kustom dari editor lobby (misalnya kartu power Satu!): kode dikompilasi lalu dicoba di meja contoh."""
+        g = GAMES.get(body.game)
+        if g is None:
+            raise HTTPException(404, "Game tidak dikenal")
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, g.cek_kustom, body.item)
 
     @r.post("/api/main/latihan")
     async def latihan(body: LatihanIn) -> dict[str, Any]:
@@ -228,8 +242,21 @@ class HubConn:
             await self._enter(room, member)
             return
         room, m = self.room, self.member
+        if room is not None and (room.deleted or self.mgr.rooms.get(room.code) is not room):
+            self.room = self.member = None
+            await self.send({"type": "room_dihapus", "oleh": None, "message": "Room ini sudah dihapus."})
+            return
         if room is None or m is None or m.id not in room.members:
             raise RoomError("Masuk ke room dulu.")
+        if t == "hapus_room":
+            if m.id != room.host_id:
+                raise RoomError("Hanya host yang bisa menghapus room.")
+            self.mgr.rooms.pop(room.code, None)        # hilang dari daftar dulu: tidak ada yang bisa masuk lagi
+            room.deleted = True
+            await room.broadcast({"type": "room_dihapus", "oleh": m.name, "message": f"Room dihapus oleh {m.name}."})
+            self.mgr.shutdown(room)
+            self.room = self.member = None
+            return
         if t == "aksi":
             await room.act(m, msg.get("aksi"), msg.get("step"))
             return
@@ -284,9 +311,12 @@ class HubConn:
                 room.seats = [s for s in room.seats if s.owner != m.id]
                 room.members.pop(m.id, None)
                 if room.host_id == m.id:
-                    room.host_id = next(iter(room.members), "")
+                    room.host_id = next((x.id for x in room.members.values() if x.online), next(iter(room.members), ""))
             self.room = self.member = None
             await self.send({"type": "keluar_ok"})
+            if not room.members:
+                self.mgr.remove(room.code)          # orang terakhir keluar: room langsung dihapus
+                return
             await room.push_lobby()
             return
         else:

@@ -4,7 +4,7 @@ Satu server, tiga pintu masuk di halaman depan:
 
 | Pintu | Isi | Alamat |
 |---|---|---|
-| **Arena Mabar** | 11 game main bareng. Setiap kursi boleh manusia atau bot, boleh dicampur. | `#main` |
+| **Arena Mabar** | 16 game main bareng. Setiap kursi boleh manusia atau bot, boleh dicampur. | `#main` |
 | **Suit Bot Arena** | Adu bot batu-gunting-kertas dengan editor blok/Python, replay animasi, turnamen, liga. | `#suit` |
 | **Kilas Pasar** | Simulasi trading dengan candle asli kripto & saham. | `#pasar` |
 
@@ -22,7 +22,12 @@ Isi dokumen:
   [Rebutan Lahan](#8-rebutan-lahan) ·
   [Dilema Kas Desa](#9-dilema-kas-desa) ·
   [Angka Dua Pertiga](#10-angka-dua-pertiga) ·
-  [Pasar Malam Sepi](#11-pasar-malam-sepi)
+  [Pasar Malam Sepi](#11-pasar-malam-sepi) ·
+  [Wordle Mabar](#12-wordle-mabar) ·
+  [Labirin Mabar](#13-labirin-mabar) ·
+  [Satu! (gaya UNO)](#14-satu-gaya-uno) ·
+  [Evolusi Hex](#15-evolusi-hex) ·
+  [Juragan Nusantara (gaya Monopoli)](#16-juragan-nusantara-gaya-monopoli)
 - [Suit Bot Arena](#suit-bot-arena)
 - [Kilas Pasar](#kilas-pasar)
 
@@ -39,6 +44,10 @@ Panduan bot lengkap per game (untuk ditempel ke AI) ada di [docs/bot/](bot/READM
 2. Bagikan **kode 5 huruf** atau tombol **Salin link undangan**. Teman membuka link itu, atau mengetik kode di halaman Arena Mabar
    lalu menekan **Gabung**. **Tonton saja** masuk sebagai penonton.
 3. Host menekan **▶ Mulai** setelah kursinya cukup.
+4. Host bisa menekan **🗑️ Hapus room** kapan saja (match yang berjalan ikut dihentikan, semua orang dikeluarkan).
+5. Room yang **tidak punya satu pun orang online** selama 2 menit (atur dengan `ROOM_IDLE_SECONDS`) dihapus otomatis dari memori,
+   termasuk match yang sedang berjalan. Waktu 2 menit itu cukup untuk refresh atau layar HP mati sebentar. Kalau orang terakhir
+   menekan **Keluar** di lobby, room langsung dihapus. Hal yang sama berlaku untuk room Suit Bot Arena dan balapan Kilas Pasar.
 
 ### Kursi: manusia, bot, atau campur
 
@@ -278,6 +287,9 @@ Opsi kustom:
 - **Barang minus**: barang kutukan bernilai −1 sampai −8. Tidak ada yang bayar, tapi poin minusnya kena ke penawar **tertinggi** dan
   **terendah** (semua yang seri di ujung ikut kena), plus penawar **tengah** kalau jumlah pemain ganjil dan lebih dari 3.
 - **Bonus set** (3 barang satu kategori: Pusaka, Seni, Kriya, Harta) dan **koin tiap ronde**.
+- **Dividen poin** (preset *Investor*): setiap *N* ronde (default 2), poin barang + bonus set yang kamu miliki menghasilkan koin
+  sebesar *X%* (misalnya 20 poin × 10% = 2 koin). Pecahan koin disimpan untuk pembayaran berikutnya. Barang yang dibeli lebih awal
+  jadi ikut membiayai tawaranmu berikutnya, bukan cuma poin diam.
 
 Tips: perhatikan dompet lawan. Kalau semua lawan tinggal sedikit koin, barang bagus bisa didapat murah. Untuk barang minus, posisi
 tawaranmu yang menentukan: jangan di ujung, jangan di tengah.
@@ -346,6 +358,82 @@ sah terdekat, **tebakan lawan rahasia** (setelah ronde hanya rata-rata/median, t
   (🎉 Festival: kapasitas ×1,5 dan hadiah ×2, 🌧️ Hujan: kapasitas separuh), **jumlah pengunjung rahasia** (hanya diumumkan nyaman/sumpek).
 - Bot yang semuanya berpikir sama akan datang bersamaan dan rugi bersama. Template **Bergiliran Kursi** memakai nomor kursi (`saya()`)
   supaya tiap malam yang datang pas kapasitas.
+
+## 12. Wordle Mabar
+
+**1–8 pemain · balapan real-time / serentak / bergiliran · `def aksi():`**
+
+- Tebak kata rahasia **5 huruf bahasa Indonesia**: 🟩 huruf & posisi benar, 🟨 huruf ada di posisi lain, ⬜ tidak ada. Satu match berisi
+  beberapa kata (default 3); setelah tiap kata, jawabannya dan semua papan dibuka.
+- **Balapan** (default): papan masing-masing, real-time. Benar di baris ke-*k* = (maks tebakan + 1 − *k*) poin, plus **+3 / +2 / +1**
+  untuk tiga tercepat. **Anti spam:** setiap baris yang terpakai mengurangi poin, dan setelah tebakan salah kamu harus menunggu
+  **3 detik** (bisa diatur host) sebelum boleh menebak lagi. Kata yang tidak ada di kamus ditolak tanpa memakan baris.
+- **Serentak**: semua menebak satu kata di setiap langkah, bersamaan. **Bergiliran**: satu papan bersama; menebak benar +5, tebakan
+  yang membuka huruf hijau baru +1.
+- Opsi: papan lawan (warna saja / huruf & warna / tidak terlihat), **mode sulit**, kata di luar kamus (ditolak / memakan baris /
+  bebas), **kata licik** (jawaban belum ditentukan dan terus menghindar, gaya Absurdle), jumlah kata, dan maksimal tebakan.
+- Bisa diketik dengan keyboard atau papan ketik di layar. Kata yang sudah lengkap di layar ikut terkirim kalau waktu habis.
+- Kamus memakai daftar kata dasar Sastrawi (lisensi MIT, lihat `backend/app/games/data/LISENSI-KATA.txt`); kata jawaban dipilih dari
+  daftar kata umum.
+
+## 13. Labirin Mabar
+
+**1–8 pemain · balapan real-time · `def aksi():`**
+
+- Semua mulai dari pojok kiri atas labirin yang sama dan berlomba ke **pintu keluar** 🚪. Setiap pemain bergerak sendiri-sendiri
+  secepat mungkin (panah / WASD, atau tombol di layar). **🏃 Lari** menyusuri lorong sampai persimpangan dengan satu tekan.
+- Finis ke-1, ke-2, ... dapat 10 / 7 / 5 / 4 / 3 / 2 / 1 poin, koin 🪙 +1. Ada jatah langkah per labirin, dan begitu ada yang finis yang
+  lain tinggal punya 30 langkah.
+- **Pandangan**: *terang* (seluruh labirin terlihat), *kabut yang diingat* (jalan yang pernah terlihat tetap terbuka di petamu), atau
+  *kabut tanpa ingatan* (hanya sekitarmu: harus hafal jalan). Jarak pandang, posisi lawan, dan kompas pintu keluar bisa diatur.
+- Kemampuan terbatas yang terlihat **semua pemain**: 📍 **tanda / gambar** (↑ ↓ ← → ✖ ⭐ ❓ 💀) di petakmu, 🧵 **tali** (jejak jalanmu),
+  dan 🔦 **suar** (pandangan jauh sebentar). Tanda bisa menolong... atau menyesatkan lawan.
+- Opsi kejutan: koin, **jebakan** tersembunyi (−5 jatah langkah dan tertahan 3 detik), **portal** berpasangan, dan jalan pintas.
+
+## 14. Satu! (gaya UNO)
+
+**2–8 pemain · bergiliran · `def aksi():`**
+
+- Habiskan kartu lebih dulu: mainkan kartu yang **sewarna** atau **sama angka/simbolnya**, atau kartu liar. ⊘ lewati, ⇄ balik,
+  +2, 🌈 ganti warna, +4. Tekan **📢 SATU!** saat memainkan kartu kedua terakhir (lupa = tarik 2).
+- Pemenang ronde mendapat poin dari sisa kartu lawan (angka = nilainya, aksi 20, liar 50). Default 3 ronde.
+- Opsi: **tumpuk +2/+4**, ambil sampai dapat, **aturan 7-0** (7 = tukar kartu, 0 = semua tangan berpindah), jumlah kartu lawan rahasia.
+- **Kartu power kustom**: host bisa menambah sampai 8 jenis kartu buatan sendiri di pengaturan room. Efeknya ditulis dengan kode
+  `def efek():` (subset Python yang sama dengan bot), misalnya `tukar_tangan(pemain_ini(), target())` atau `for n in lawan(): tarik(n, 1)`.
+  Ada contoh siap pakai (Tukar Tangan, Hujan Kartu, Putar Tangan, Hadiah, Lompat Dua, Sial Bersama, Main Lagi, Balas Dendam), tombol
+  **🧪 Coba** yang menjalankan kartu di meja contoh, dan **📋 Tempel JSON** untuk kartu buatan AI. Panduan menulis kartu (untuk ditempel
+  ke AI) ada di tab **Panduan bot** game ini, bagian *Membuat kartu power kustom*.
+
+## 15. Evolusi Hex
+
+**1–6 pemain · bersamaan per giliran · `def aksi():`**
+
+- Peta heksagonal dengan tanah, 🌿 semak (isi tersembunyi), dan 🪨 batu. Setiap pemain punya satu **spesies** yang mulai dengan 2
+  makhluk di sarangnya.
+- Giliran 0: **desain spesies**, bagi 15 poin ke 👁️ **pandangan** (melihat lurus ke 6 arah, biaya 0,25×nilai energi per giliran),
+  🐾 **kelincahan** (langkah per giliran), dan 🦣 **ukuran** (HP & energi maksimal). Biaya per langkah = **(ukuran/5)³ × (kelincahan/5)**,
+  jadi makhluk besar sekaligus cepat sangat boros (seperti simulasi evolusi di video).
+- Makanan: 🌱 rumput +12, 🍎 buah +25, 🍖 daging +45 (dari makhluk yang mati). Makhluk yang ukurannya **≥ 1,2×** lawan memangsanya.
+  Energi habis = kelaparan (HP turun).
+- **Beranak** (toggle per makhluk): kalau energinya cukup, makhluk melahirkan anak dengan desain spesies saat ini, kadang
+  **bermutasi** ±1. Makhluk diberi nomor otomatis yang bisa diganti namanya di daftar samping.
+- Perintah per makhluk: **🧠 naluri** (otomatis), **🎯 tujuan** (klik petak di peta, makhluk jalan sendiri), **🕹️ manual** (pilih langkah
+  satu per satu), atau **⏸ diam**. Pasang **🪨 batu** atau **🌵 duri** tersembunyi di sebelah makhlukmu (jatah 3).
+- Poin: makanan 1/2/3, memangsa +5, kelahiran +3, +5 per makhluk yang hidup di akhir. Opsi: kabut, rasio memangsa, semak, batu,
+  jebakan, peluang mutasi, kelimpahan makanan, dan bangkit setelah punah.
+
+## 16. Juragan Nusantara (gaya Monopoli)
+
+**2–6 pemain · bergiliran · `def aksi():`**
+
+- Papan 40 petak berisi kota-kota Indonesia (Pacitan sampai Jakarta), 4 transportasi, PLN & PDAM, pajak, Kesempatan, dan Dana Umum.
+- Lempar dua dadu, beli properti, tagih sewa, bangun rumah & hotel setelah memiliki satu kelompok warna lengkap, gadai/tebus.
+  Dadu kembar = lempar lagi; tiga kali kembar = penjara.
+- Properti yang tidak dibeli **dilelang tertutup** ke semua pemain (seperti Lelang Rahasia). **Tukar-menukar**: di gilirannya pemain
+  boleh menawarkan properti/uang ke pemain lain, yang lalu menerima atau menolak.
+- Tidak bisa bayar = rumah dijual & properti digadai otomatis; masih kurang = bangkrut. Menang: pemain terakhir, atau kekayaan bersih
+  terbesar setelah batas putaran (default 25).
+- Opsi: uang awal, gaji lewat Mulai, batas putaran, lelang, tukar-menukar, jackpot Parkir Bebas, uang lawan rahasia.
 
 ---
 

@@ -16,8 +16,8 @@ from __future__ import annotations
 import copy
 import hashlib
 import random
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
 
 class ActionError(ValueError):
@@ -44,9 +44,16 @@ class Setting:
     pilihan: list[list[str]] | None = None   # [[nilai, label], ...]
     ket: str = ""
     grup: str = "dasar"        # dasar | informasi | aturan | kejutan (lihat GRUP)
-    jika: dict[str, Any] | None = None       # tampil hanya kalau setting lain bernilai ini (nilai atau list nilai)
+    jika: dict[str, Any] | None = None       # tampil hanya kalau setting lain bernilai ini: nilai, list nilai,
+                                             # {"min": angka} (minimal sekian) atau {"bukan": nilai}
+    cleaner: Callable[[Any], Any] | None = field(default=None, repr=False)   # jenis khusus (misalnya "kartu")
 
     def clean(self, v: Any) -> Any:
+        if self.cleaner is not None:
+            try:
+                return self.cleaner(v)
+            except (TypeError, ValueError, KeyError, AttributeError):
+                return copy.deepcopy(self.default)
         try:
             if self.jenis == "bool":
                 return bool(v) if not isinstance(v, str) else v.lower() in ("1", "true", "ya", "on")
@@ -154,6 +161,20 @@ class Game:
     def tiebreak(self, s: dict[str, Any]) -> list[float] | None:
         return None
 
+    def is_mandiri(self, cfg: dict[str, Any]) -> bool:
+        """Mode mandiri untuk pengaturan ini (game boleh punya mode bergiliran DAN mode balapan sendiri-sendiri)."""
+        return self.mandiri
+
+    def jeda_bot(self, cfg: dict[str, Any]) -> float:
+        """Jeda minimal (detik) antar aksi bot di mode mandiri, misalnya supaya bot tidak menyapu balapan melawan manusia."""
+        return 0.0
+
+    def cooldown(self, s: dict[str, Any], p: int, events: list[dict[str, Any]]) -> float:
+        """Mode mandiri: berapa detik kursi ``p`` harus menunggu sebelum boleh beraksi lagi setelah aksi yang menghasilkan
+        ``events`` (misalnya hukuman tebakan salah di balapan). Hanya mengatur kapan aksi diterima, jadi game tetap
+        deterministik: match bisa dibuat ulang dari seed + aksi tanpa tahu waktunya."""
+        return 0.0
+
     def result(self, s: dict[str, Any]) -> dict[str, Any]:
         sc = self.scores(s)
         order = rank_by(sc, self.tiebreak(s))
@@ -173,7 +194,11 @@ class Game:
 
     def clean_settings(self, cfg: dict[str, Any] | None) -> dict[str, Any]:
         cfg = cfg or {}
-        return {st.id: st.clean(cfg.get(st.id, st.default)) for st in self.settings}
+        return {st.id: st.clean(cfg.get(st.id, copy.deepcopy(st.default))) for st in self.settings}
+
+    def cek_kustom(self, item: Any) -> dict[str, Any]:
+        """Cek satu isian kustom dari pemain (misalnya kartu power yang ditulis dengan kode). Dipakai editor di lobby."""
+        return {"ok": False, "error": {"baris": None, "pesan": "Game ini tidak punya isian kustom."}}
 
     def all_presets(self) -> list[dict[str, Any]]:
         """Preset aturan: "Standar" (semua bawaan) + preset game. Nilai preset hanya menyentuh grup selain "dasar"."""

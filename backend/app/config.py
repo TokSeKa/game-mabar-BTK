@@ -23,7 +23,7 @@ class Config:
     max_rooms: int = _int("MAX_ROOMS", 200)
     max_players: int = 8
     player_grace_seconds: int = _int("PLAYER_GRACE_SECONDS", 600)   # pemain offline dihapus setelah ini
-    room_idle_seconds: int = _int("ROOM_IDLE_SECONDS", 1800)       # room tanpa pemain online dihapus
+    room_idle_seconds: int = _int("ROOM_IDLE_SECONDS", 120)        # room tanpa satu pun orang online dihapus setelah ini (semua jenis room)
     practice_concurrency: int = _int("PRACTICE_CONCURRENCY", 4)
     static_dir: Path = Path(os.environ.get("STATIC_DIR", ROOT / "frontend" / "dist"))
     guide_path: Path = Path(os.environ.get("GUIDE_PATH", ROOT / "docs" / "PANDUAN_BOT_LLM.md"))

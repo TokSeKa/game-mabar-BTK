@@ -513,6 +513,14 @@ export function RLelang({ view, names, me, canAct, acted, act, replay, draft }: 
           {v.bonus_set ? ` · tiap 3 barang sekategori = +${v.bonus_set} poin` : ''}
           {v.lihat_depan < v.ronde_total ? ` · jadwal terlihat ${v.lihat_depan} barang ke depan` : ''}
         </p>
+        {v.dividen_persen > 0 && (
+          <div className="dividen-bar">
+            <span>💰 Dividen <b>{v.dividen_persen}%</b> dari poin tiap {v.dividen_tiap} ronde</span>
+            {v.dividen_ronde != null
+              ? <span className="hint">dibayar setelah lelang ronde <b>{v.dividen_ronde}</b>{v.dividen_saya != null ? <> · kamu ≈ <b className="gold">+{v.dividen_saya}</b> koin</> : ''}</span>
+              : <span className="hint">tidak ada pembayaran lagi</span>}
+          </div>
+        )}
         <TurnNote canAct={canAct} acted={acted} replay={replay} me={me}>
           {curMinus ? 'Barang minus: jangan jadi yang tertinggi, terendah, atau di tengah!' : 'Tawar diam-diam.'} Koinmu {myCoins}.
         </TurnNote>
@@ -537,6 +545,9 @@ export function RLelang({ view, names, me, canAct, acted, act, replay, draft }: 
                 : <span className="bad">{r.hangus ? 'seri, hangus' : 'tidak ada tawaran'}</span>}
             {r.hangus_koin && Object.keys(r.hangus_koin).length > 0 && (
               <span className="bad"> · koin hangus {Object.entries(r.hangus_koin).map(([n, x]) => `${n} −${x}`).join(', ')}</span>
+            )}
+            {r.dividen && (
+              <span className="good"> · 💰 dividen {Object.entries(r.dividen).filter(([, x]) => Number(x) > 0).map(([n, x]) => `${n} +${x}`).join(', ') || 'belum ada (poin masih kecil)'}</span>
             )}
             {r.tawaran ? (
               <span className="hist-chips">

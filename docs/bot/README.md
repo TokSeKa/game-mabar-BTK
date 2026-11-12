@@ -16,3 +16,8 @@ File ini dibuat otomatis dari definisi game (`python -m app.games.gen_docs`).
 | Dilema Kas Desa | 2–8 | `def aksi():` | [kasdesa.md](kasdesa.md) |
 | Angka Dua Pertiga | 2–8 | `def aksi():` | [duapertiga.md](duapertiga.md) |
 | Pasar Malam Sepi | 2–12 | `def aksi():` | [farol.md](farol.md) |
+| Wordle Mabar | 1–8 | `def aksi():` | [wordle.md](wordle.md) |
+| Labirin Mabar | 1–8 | `def aksi():` | [labirin.md](labirin.md) |
+| Satu! (gaya UNO) | 2–8 | `def aksi():` | [satu.md](satu.md) |
+| Evolusi Hex | 1–6 | `def aksi():` | [evolusi.md](evolusi.md) |
+| Juragan Nusantara (gaya Monopoli) | 2–6 | `def aksi():` | [monopoli.md](monopoli.md) |

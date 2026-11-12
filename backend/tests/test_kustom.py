@@ -581,3 +581,26 @@ def test_kejadian_live_tidak_membocorkan_info_rahasia(gid, cfg):
         if g.over(s):
             break
     assert dicek > 0
+
+
+# ------------------------------------------------------------------ Lelang: dividen
+def test_lelang_dividen_dari_poin_dengan_sisa_pecahan():
+    g, s = _lelang({"barang": 6, "dividen_persen": 10, "dividen_tiap": 2}, names=("A", "B"))
+    s["jadwal"] = [8, 6, 6, 7, 2, 10]
+    assert g.observe(s, 0)["dividen_ronde"] == 2 and g.bot_library(s, 0, g.observe(s, 0))["sisa_pembayaran_dividen"]() == 3
+    g.apply(s, {0: 30, 1: 0})                                  # A dapat 8 poin
+    assert g.observe(s, 0)["dividen_saya"] == 0                # 8 × 10% = 0,8 koin: belum genap
+    ev = g.apply(s, {0: 0, 1: 0})
+    div = next(e for e in ev if e["jenis"] == "dividen")
+    assert div["bayar"] == {"A": 0, "B": 0} and s["dividen_sisa"][0] == pytest.approx(0.8)
+    g.apply(s, {0: 0, 1: 0})
+    ev = g.apply(s, {0: 0, 1: 0})                               # ronde 4: 0,8 + 0,8 = 1,6 → 1 koin, sisa 0,6
+    assert next(e for e in ev if e["jenis"] == "dividen")["bayar"]["A"] == 1 and s["koin"][0] == 71
+    assert s["riwayat"][3]["dividen"] == {"A": 1, "B": 0}
+    assert g.observe(s, 1)["dividen_ronde"] == 6
+    g2, s2 = _lelang({"barang": 4})
+    assert g2.observe(s2, 0)["dividen_ronde"] is None and all(e["jenis"] != "dividen" for e in g2.apply(s2, {p: 0 for p in range(4)}))
+
+
+def test_lelang_dividen_template_jalan():
+    _templates_ok("lelang", {"dividen_persen": 20, "dividen_tiap": 1, "barang_minus": 2}, "ABCD")

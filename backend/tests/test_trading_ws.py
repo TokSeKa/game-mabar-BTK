@@ -145,3 +145,28 @@ def test_balapan(client):
         assert {r["name"] for r in board["board"]} == {"Host", "Tamu"}
         summ = until(b, "summary", limit=500)
         assert summ["mode"] == "balapan" and len(summ["board"]) == 2
+
+
+def test_balapan_dihapus_host_dan_room_kosong_dibuang(client):
+    with client.websocket_connect("/ws/pasar") as a, client.websocket_connect("/ws/pasar") as b:
+        a.send_json({"type": "race_create", "name": "Host", "config": {"tf": "15m", "langkah": 20, "kecepatan": 0.3}})
+        j = until(a, "race_joined")
+        b.send_json({"type": "race_join", "code": j["code"], "name": "Tamu"})
+        until(b, "race_joined")
+        b.send_json({"type": "race_delete"})
+        assert "host" in until(b, "error")["message"]
+        a.send_json({"type": "race_delete"})
+        assert until(b, "race_deleted")["by"] == "Host"
+        assert j["code"] not in client.svc.rooms
+    with client.websocket_connect("/ws/pasar") as c:
+        c.send_json({"type": "race_create", "name": "Sendiri", "config": {"tf": "15m", "langkah": 20}})
+        code = until(c, "race_joined")["code"]
+    import time as _t
+    batas = _t.time() + 5                                    # tunggu server memproses putusnya koneksi
+    while any(p.online for p in client.svc.rooms[code].players.values()) and _t.time() < batas:
+        _t.sleep(0.02)
+    now = _t.time()
+    client.svc.cleanup(room_empty=120, now=now)
+    assert code in client.svc.rooms                          # baru kosong: masih ditunggu
+    client.svc.cleanup(room_empty=120, now=now + 121)
+    assert code not in client.svc.rooms

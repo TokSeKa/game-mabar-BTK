@@ -146,3 +146,32 @@ def test_kick(client):
         a.send_json({"type": "kick", "player_id": pid})
         until(b, "kicked")
         until(a, "room_state", pred=lambda m: len(m["room"]["players"]) == 1)
+
+
+def test_host_menghapus_room_dan_room_kosong_dibuang(client):
+    mgr = client.app.state.manager
+    with client.websocket_connect("/ws") as a, client.websocket_connect("/ws") as b:
+        a.send_json({"type": "create_room", "name": "Host"})
+        code = until(a, "joined")["room_code"]
+        b.send_json({"type": "join_room", "code": code, "name": "Tamu"})
+        until(b, "joined")
+        b.send_json({"type": "delete_room"})
+        assert "host" in until(b, "error")["message"]
+        a.send_json({"type": "delete_room"})
+        assert until(b, "room_deleted")["by"] == "Host"
+        assert code not in mgr.rooms
+        b.send_json({"type": "react", "emoji": "👏"})
+        until(b, "kicked")
+    with client.websocket_connect("/ws") as c:
+        c.send_json({"type": "create_room", "name": "Sendiri"})
+        code2 = until(c, "joined")["room_code"]
+    room = mgr.rooms[code2]
+    import time
+    batas = time.time() + 3
+    while room.empty_since is None and time.time() < batas:  # server memproses putusnya koneksi secara async
+        time.sleep(0.02)
+    assert room.empty_since is not None                       # satu-satunya pemain menutup tab
+    import asyncio
+    room.empty_since -= mgr.room_idle + 1
+    asyncio.run(mgr.cleanup())
+    assert code2 not in mgr.rooms

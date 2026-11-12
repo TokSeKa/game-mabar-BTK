@@ -132,6 +132,11 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
           sockRef.current?.close();
           exitRef.current('Kamu dikeluarkan dari room oleh host.');
           break;
+        case 'room_deleted':
+          remove(KEYS.session);
+          sockRef.current?.close();
+          exitRef.current(`Room dihapus oleh ${msg.by ?? 'host'}.`);
+          break;
         case 'left':
           break;
       }
@@ -220,6 +225,10 @@ export function Room({ entry, bot, setBot, onExit, toast }: Props) {
         <EventName id={room.settings.event} />
         <span className="spacer" />
         <ReactionBar onSend={(e) => send({ type: 'react', emoji: e })} />
+        {isHost && (
+          <button className="btn small danger" type="button" title="Hapus room ini untuk semua pemain"
+            onClick={() => window.confirm('Hapus room ini? Semua pemain akan dikeluarkan.') && send({ type: 'delete_room' })}>🗑️ Hapus room</button>
+        )}
         <button className="btn small danger" type="button" onClick={leave}>Keluar room</button>
       </div>
 

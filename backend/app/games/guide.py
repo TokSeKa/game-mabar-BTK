@@ -63,6 +63,9 @@ def guide_markdown(g: Game) -> str:
         if presets:
             lines += ["", "**Preset:** " + "; ".join(
                 f"*{p['nama']}* ({', '.join(f'{k}={v}' for k, v in p['nilai'].items())})" for p in presets)]
+    extra = getattr(g, "panduan_tambahan", "")
+    if extra:
+        lines += ["", extra.strip()]
     lines += ["", BAHASA, "## Contoh bot", ""]
     for t in g.templates:
         lines += [f"### {t['nama']}", "", t["ket"], "", "```python", t["kode"].rstrip(), "```", ""]

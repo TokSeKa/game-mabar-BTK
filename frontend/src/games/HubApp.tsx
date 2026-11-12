@@ -19,7 +19,7 @@ export type MabarRoute =
 
 export const GAME_ART: Record<string, string> = {
   suit: '✊✌️✋', poker: '🂡🃁', kapal: '🚢💥', robot: '🤖◆', kartu: '🃏🐉', tycoon: '🍢🧋',
-  lelang: '🔨💎', blotto: '🚩⚔️', kasdesa: '🏦🤝', duapertiga: '🔢🎯', farol: '🎡🏠',
+  lelang: '🔨💎', blotto: '🚩⚔️', kasdesa: '🏦🤝', duapertiga: '🔢🎯', farol: '🎡🏠', wordle: '🟩🔤', labirin: '🧭🚪', satu: '🟥🃏', evolusi: '🧬⬢', monopoli: '🏙️🎲',
 };
 
 interface Props {
