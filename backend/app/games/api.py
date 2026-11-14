@@ -10,7 +10,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel, Field
 
 from ..bot.errors import BotError
@@ -78,6 +78,14 @@ def mount(app: FastAPI, pool=None, db=None, room_empty: float = 120.0) -> ArenaM
         if g is None:
             raise HTTPException(404, "Game tidak dikenal")
         return guide_markdown(g)
+
+    @r.get("/api/main/foto/{kode}/{fid}")
+    async def foto(kode: str, fid: str) -> Response:
+        room = mgr.rooms.get(str(kode).upper())
+        item = room.foto.get(fid) if room is not None else None
+        if item is None:
+            raise HTTPException(404, "Foto tidak ditemukan (room sudah dihapus?)")
+        return Response(item[1], media_type=item[0], headers={"Cache-Control": "private, max-age=3600"})
 
     @r.post("/api/main/validasi")
     async def validasi(body: CodeIn) -> dict[str, Any]:
@@ -281,6 +289,10 @@ class HubConn:
             return
         if t == "reaksi":
             await room.react(m, str(msg.get("emoji") or ""))
+            return
+        if t == "foto":
+            fid = room.add_foto(m, msg.get("data"))
+            await self.send({"type": "foto_ok", "id": fid, "ref": msg.get("ref")})
             return
         if t == "tambah_bot":
             room.add_bot(m, str(msg.get("nama") or ""), str(msg.get("kode") or ""), str(msg.get("label") or ""))

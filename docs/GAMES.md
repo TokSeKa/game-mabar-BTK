@@ -4,7 +4,7 @@ Satu server, tiga pintu masuk di halaman depan:
 
 | Pintu | Isi | Alamat |
 |---|---|---|
-| **Arena Mabar** | 16 game main bareng. Setiap kursi boleh manusia atau bot, boleh dicampur. | `#main` |
+| **Arena Mabar** | 21 game main bareng. Setiap kursi boleh manusia atau bot (kecuali game khusus manusia), boleh dicampur. | `#main` |
 | **Suit Bot Arena** | Adu bot batu-gunting-kertas dengan editor blok/Python, replay animasi, turnamen, liga. | `#suit` |
 | **Kilas Pasar** | Simulasi trading dengan candle asli kripto & saham. | `#pasar` |
 
@@ -27,7 +27,12 @@ Isi dokumen:
   [Labirin Mabar](#13-labirin-mabar) ·
   [Satu! (gaya UNO)](#14-satu-gaya-uno) ·
   [Evolusi Hex](#15-evolusi-hex) ·
-  [Juragan Nusantara (gaya Monopoli)](#16-juragan-nusantara-gaya-monopoli)
+  [Juragan Nusantara (gaya Monopoli)](#16-juragan-nusantara-gaya-monopoli) ·
+  [Domino](#17-domino-gaple--draw) ·
+  [Ular Mabar](#18-ular-mabar) ·
+  [Tembak Jitu](#19-tembak-jitu) ·
+  [Hitung Uang](#20-hitung-uang) ·
+  [Tebak Gambar](#21-tebak-gambar)
 - [Suit Bot Arena](#suit-bot-arena)
 - [Kilas Pasar](#kilas-pasar)
 
@@ -113,6 +118,8 @@ Setiap game punya banyak pengaturan selain jumlah ronde/pemain. Di lobby, host m
 - Penonton melihat tampilan umum: kartu tertutup lawan, kapal, dan rahasia lain tetap tersembunyi. Host bisa mengaktifkan
   **Penonton melihat semua rahasia** (enak untuk siaran/nobar, tapi jangan dipakai kalau ada pemain yang ikut menonton dari HP lain).
 - Semua orang di room bisa mengirim reaksi emoji (👏 😂 😮 🔥 😭 🤝 💀 🎉) yang melayang di layar semua orang.
+- Di HP, bagian atas room dibuat ringkas: reaksi ada di tombol 😀 dan *Hapus room / Keluar* di tombol ⋯. Bar waktu (dan tombol jeda
+  host) menempel di atas layar saat di-scroll.
 
 ### Setelah match
 
@@ -372,7 +379,9 @@ sah terdekat, **tebakan lawan rahasia** (setelah ronde hanya rata-rata/median, t
   yang membuka huruf hijau baru +1.
 - Opsi: papan lawan (warna saja / huruf & warna / tidak terlihat), **mode sulit**, kata di luar kamus (ditolak / memakan baris /
   bebas), **kata licik** (jawaban belum ditentukan dan terus menghindar, gaya Absurdle), jumlah kata, dan maksimal tebakan.
-- Bisa diketik dengan keyboard atau papan ketik di layar. Kata yang sudah lengkap di layar ikut terkirim kalau waktu habis.
+- Mengetik: di HP dipakai **keyboard bawaan HP** (huruf berwarna tetap terlihat sebagai petunjuk); di laptop keyboard biasa atau papan
+  huruf di layar. Bisa ditukar dengan tautan di bawah papan. Kata yang sudah lengkap di layar ikut terkirim kalau waktu habis.
+- Setelah satu kata selesai, **semua tebakan semua pemain (huruf + warna)** dibuka, dan bisa dilihat lagi di riwayat kata.
 - Kamus memakai daftar kata dasar Sastrawi (lisensi MIT, lihat `backend/app/games/data/LISENSI-KATA.txt`); kata jawaban dipilih dari
   daftar kata umum.
 
@@ -434,6 +443,63 @@ sah terdekat, **tebakan lawan rahasia** (setelah ronde hanya rata-rata/median, t
 - Tidak bisa bayar = rumah dijual & properti digadai otomatis; masih kurang = bangkrut. Menang: pemain terakhir, atau kekayaan bersih
   terbesar setelah batas putaran (default 25).
 - Opsi: uang awal, gaji lewat Mulai, batas putaran, lelang, tukar-menukar, jackpot Parkir Bebas, uang lawan rahasia.
+
+## 17. Domino (Gaple & Draw)
+
+**2–6 pemain · bergiliran · `def aksi():`**
+
+- Tempel kartu di **ujung kiri atau kanan** meja; angkanya harus sama dengan ujung itu. **Gaple**: tidak ada yang cocok = lewat.
+  **Draw**: ambil dari tumpukan sampai dapat (tumpukan habis baru boleh lewat).
+- Ronde selesai saat ada yang kartunya habis, atau meja **buntu** (semua lewat berturut-turut: sisa mata paling sedikit menang).
+  Pemenang mendapat jumlah mata sisa kartu lawan (atau semua kena minus sisa matanya sendiri). Ronde pertama dibuka balak tertinggi.
+- **Tim 2 lawan 2** (4 pemain), set **balak 6** atau **balak 9**, target poin.
+- **Tantangan**: kartu terbuka (semua tangan terlihat), **bonus tutup balak** ×2, **denda tiap lewat**, kartu **0-0 jadi bom**
+  (pemain berikutnya ambil 2 kartu / kena denda).
+
+## 18. Ular Mabar
+
+**1–8 pemain · real-time · `def aksi():`**
+
+- Snake multiplayer: semua ular bergerak **bersamaan terus-menerus** (default 6 langkah per detik, bisa 3–12). Belok dengan panah /
+  WASD, geser di layar HP, atau tombol panah.
+- 🍎 apel +1 (tumbuh 1), ⭐ emas +3 (tumbuh 2), 🤢 busuk −2 (menyusut 2, opsional).
+- **Tidak boleh saling timpa**: menabrak badan ular mana pun, tembok, atau tepi = tumbang (−3, bangkit 2 detik lagi; atau keluar ronde).
+  Pemilik badan yang ditabrak +2. Adu kepala: keduanya tumbang (atau yang lebih panjang menang).
+- Akhir ronde: yang hidup +3, terpanjang +5. Opsi: tepi tembus, rintangan, jumlah buah, bangkai jadi buah, lama ronde.
+- Server melangkah sendiri tiap detak; bot berpikir tiap detak dengan batas 4.000 langkah kode.
+
+## 19. Tembak Jitu
+
+**1–12 pemain · real-time · khusus manusia**
+
+- Lingkaran sasaran muncul satu per satu. **Klik / ketuk sedekat mungkin ke tengah**, secepat mungkin. Poin = **cincin (1–10) × 10 ×
+  faktor waktu** (1,0 kalau instan, turun proporsional sampai 0,3 di batas waktu). Meleset atau terlambat = 0, satu peluru per sasaran.
+- Semua pemain mendapat urutan sasaran yang sama, mulai serentak dengan hitung mundur, dan **waktu reaksi dihitung di browser
+  masing-masing** (koneksi lambat tidak merugikan). Server hanya mengirim sasaran yang sedang aktif.
+- Kursor bidik dengan pistol mini, tombol **layar penuh**. Kejutan: sasaran bergerak, menyusut, **sandera** (jangan ditembak),
+  dan target ganda.
+
+## 20. Hitung Uang
+
+**1–12 pemain · real-time · khusus manusia**
+
+- Segepok uang rupiah (desain fiktif "Bank Mabar") yang sama untuk semua pemain. Ketuk lembar teratas untuk menggesernya ke tumpukan
+  "sudah dihitung", lalu **ketik totalnya**. Mode sebar: semua uang disebar di meja.
+- Benar pertama +15, kedua +12, ketiga +10, dan seterusnya. Salah −3 dan hukuman tunggu (maksimal 3 kali salah per gepok).
+- Tantangan: uang **berantakan**, **terbalik** (sisi belakang), campur **koin**, uang **palsu** (tanpa pita perak, tidak dihitung),
+  dan **kupon / uang mainan** (tidak dihitung).
+
+## 21. Tebak Gambar
+
+**2–10 pemain · bergiliran · khusus manusia**
+
+- Setiap pemain mendapat gambar rahasia yang terlihat oleh semua orang **kecuali dirinya sendiri**. Di giliranmu, tanyakan sesuatu
+  ("Apakah aku hewan?"): ketik di kolom pertanyaan, atau ucapkan lewat panggilan suara lalu tekan **Tanya lewat suara**.
+- Pemain lain menjawab dengan tombol **Ya / Tidak / Mungkin** (atau 5 pilihan). Semua tanya-jawab tercatat di papan.
+- Tebak kapan saja di giliranmu (salah ketik satu huruf masih diterima). Benar = menang (yang lebih dulu poinnya lebih besar);
+  salah mengurangi kesempatan. Selesai saat semua sudah menebak/kalah, atau saat ada satu pemenang (opsi).
+- Gambar: emoji dari 7 kategori bawaan, **isian tambahan** host (emoji + nama + alias), dan **foto yang diunggah host** (diperkecil
+  otomatis, disimpan di memori room dan ikut terhapus bersama room). Nama tertentu bisa dibuang dari kategori bawaan.
 
 ---
 

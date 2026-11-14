@@ -36,7 +36,8 @@ def test_template_main_sampai_selesai(gid):
         compile_for(g, t["kode"])
     for n in sorted({g.min_pemain if g.min_pemain > 1 else 2, min(g.max_pemain, 5)}):
         names = [f"Bot{i}" for i in range(n)]
-        codes = [g.templates[i % len(g.templates)]["kode"] for i in range(n)]
+        # game khusus manusia tidak punya template: semua kursi memakai aksi bawaan
+        codes = [g.templates[i % len(g.templates)]["kode"] for i in range(n)] if g.bot else [None] * n
         a = play_sync(gid, {}, names, codes, 99)
         b = play_sync(gid, {}, names, codes, 99)
         assert a["result"] == b["result"], "hasil harus sama untuk seed yang sama"
@@ -58,7 +59,11 @@ def test_aksi_bawaan_selalu_bisa_menyelesaikan_game(gid):
 def test_meta_dan_panduan(gid):
     g = GAMES[gid]
     m = g.meta()
-    assert m["id"] == gid and m["nama"] and m["aturan"] and m["templates"]
+    assert m["id"] == gid and m["nama"] and m["aturan"] and m["bot"] == g.bot
+    if not g.bot:
+        assert not m["templates"]
+        return
+    assert m["templates"]
     md = guide_markdown(g)
     assert f"def {g.fungsi_bot}():" in md and "Contoh bot" in md
 

@@ -116,6 +116,9 @@ class GameRoom:
         self.replay_store = replay_store
         self.mandiri = game.is_mandiri(self.settings)   # mode mandiri bisa tergantung pengaturan (misalnya Wordle balapan)
         self.empty_since = 0.0                  # > 0: sejak kapan tidak ada satu pun anggota yang online
+        self.detak = 0.0                        # > 0: game real-time, detik per langkah
+        self.kemudi: dict[int, list[Any]] = {}  # game real-time: antrean perintah manusia untuk detak berikutnya
+        self.foto: dict[str, tuple[str, bytes]] = {}   # foto yang diunggah host (misalnya untuk Tebak Gambar)
         self.deleted = False                    # room sudah dihapus (host atau bersih-bersih otomatis)
 
     # ------------------------------------------------------------ util
@@ -238,6 +241,8 @@ class GameRoom:
 
     def add_bot(self, m: Member, name: str, code: str, label: str) -> Seat:
         self._need_lobby()
+        if not self.game.bot:
+            raise RoomError("Game ini hanya untuk pemain manusia (tanpa bot).")
         if len(self.seats) >= self.game.max_pemain:
             raise RoomError(f"Kursi penuh (maksimal {self.game.max_pemain}).")
         if sum(1 for s in self.seats if s.owner == m.id and s.kind == "bot" and not s.self_seat) >= 7:
@@ -254,6 +259,8 @@ class GameRoom:
 
     def set_bot_code(self, m: Member, seat_id: str, code: str, label: str) -> None:
         self._need_lobby()
+        if not self.game.bot:
+            raise RoomError("Game ini hanya untuk pemain manusia (tanpa bot).")
         seat = next((s for s in self.seats if s.id == seat_id), None)
         if seat is None or seat.owner != m.id:
             raise RoomError("Kursi itu bukan milikmu.")
@@ -328,6 +335,7 @@ class GameRoom:
         self.frames, self.recent, self.final = [], [], None
         self.drafts, self.ready, self.pause_until, self.deadlines = {}, set(), 0.0, {}
         self.vers, self.paused_at, self.langkah, self.tunggu = {}, 0.0, [], {}
+        self.kemudi = {}
         self.last = time.time()
         all_bots = all(s.kind == "bot" for s in self.seats)
         if all_bots and self.jeda == 0 and self.pool is not None:
@@ -335,14 +343,15 @@ class GameRoom:
             await self.broadcast({"type": "mulai", "instan": True, "names": names})
             self.task = asyncio.create_task(self._run_instant(names, seed))
             return
-        self.mandiri = g.is_mandiri(self.settings)
+        self.detak = float(g.detak(self.settings) or 0.0)
+        self.mandiri = g.is_mandiri(self.settings) or self.detak > 0
         self.state = g.init(self.settings, names, seed)
         self.frames.append({"step": 0, "view": g.frame_view(self.state), "events": []})
         await self.push_lobby()
         for mem in list(self.members.values()):
             await self._send(mem, {"type": "mulai", "instan": False, "names": names, "seat": self.view_seat(mem.id),
                                    "main_sendiri": self.seat_of(mem.id) is not None})
-        self.task = asyncio.create_task(self._run_mandiri() if self.mandiri else self._run())
+        self.task = asyncio.create_task(self._run_detak() if self.detak > 0 else self._run_mandiri() if self.mandiri else self._run())
 
     async def _run_instant(self, names: list[str], seed: int) -> None:
         codes = [s.code for s in self.seats]
@@ -385,7 +394,7 @@ class GameRoom:
                                          "deadline": dl, "now": time.time(), "step": self.step, "events": evs,
                                          "jeda": self._pause_msg(), "dijeda_sejak": self.paused_at or None,
                                          "versi": self.vers.get(mine, 0) if self.mandiri and mine is not None else None,
-                                         "mandiri": self.mandiri,
+                                         "mandiri": self.mandiri, "detak": self.detak or None,
                                          "tunggu": self.tunggu.get(mine, 0.0) if self.mandiri and mine is not None else 0.0}))
         await asyncio.gather(*msgs)
 
@@ -393,7 +402,7 @@ class GameRoom:
         seat = self.seats[p]
         if seat.bot is None:
             return self.game.default(self.state, p)
-        return seat.bot.act(self.game, self.state, p, self.step, Limits())
+        return seat.bot.act(self.game, self.state, p, self.step, Limits(max_steps=self.game.bot_langkah))
 
     def _record(self, events: list[dict[str, Any]]) -> None:
         self.frames.append({"step": self.step, "view": self.game.frame_view(self.state), "events": events})
@@ -644,6 +653,58 @@ class GameRoom:
             await self.broadcast({"type": "error", "message": "Terjadi kesalahan di server, match dihentikan."})
             await self.push_lobby()
 
+    async def _run_detak(self) -> None:
+        """Game real-time: server melangkah sendiri setiap ``detak`` detik. Bot berpikir tiap detak; manusia mengirim
+        perintah kapan saja (antrean kecil, supaya dua belokan cepat tidak hilang). Tetap deterministik: replay cukup
+        dari seed + aksi tiap langkah."""
+        g, s = self.game, self.state
+        tick = max(0.05, self.detak)
+        nxt = time.time() + tick
+        try:
+            await self._push_state([])
+            while not g.over(s):
+                if self.paused_at:
+                    await self._hold()
+                    nxt = time.time() + tick
+                    continue
+                if self.pause_until > 0:
+                    await self._push_state([])
+                    await self._wait_pause()
+                    self.kemudi = {}
+                    nxt = time.time() + tick
+                    continue
+                now = time.time()
+                if now < nxt:
+                    await asyncio.sleep(nxt - now)
+                    continue
+                nxt = nxt + tick if nxt + tick > now else now + tick     # jangan mengejar detak yang tertinggal
+                pend = g.pending(s)
+                if not pend:
+                    break
+                self.step += 1
+                acts: dict[int, Any] = {}
+                for p in pend:
+                    if self.seats[p].kind == "bot":
+                        acts[p] = self._bot_action(p)
+                    else:
+                        q = self.kemudi.get(p)
+                        acts[p] = q.pop(0) if q else g.default(s, p)
+                self._log_step(acts)
+                events = g.apply(s, acts)
+                self._record(events)
+                self._maybe_pause_mandiri(events)
+                await self._push_state(events)
+                self.last = time.time()
+            await self._push_state([])
+            await self._finish(g.result(s), g.reveal(s))
+        except asyncio.CancelledError:
+            pass
+        except Exception:  # noqa: BLE001
+            log.exception("room %s error", self.code)
+            self.status = "lobby"
+            await self.broadcast({"type": "error", "message": "Terjadi kesalahan di server, match dihentikan."})
+            await self.push_lobby()
+
     def _expected_step(self, p: int) -> int:
         return self.vers.get(p, 0) if self.mandiri else self.step
 
@@ -664,6 +725,18 @@ class GameRoom:
             raise RoomError("Kamu tidak punya kursi manusia di match ini.")
         if self.paused_at:
             raise RoomError("Match sedang dijeda host.")
+        if self.detak > 0:
+            # real-time: perintah masuk antrean untuk detak berikutnya (tanpa nomor langkah dan tanpa balasan)
+            if self.pause_until > 0 or p not in self.game.pending(self.state):
+                return
+            try:
+                a = self.game.validate(self.state, p, action)
+            except ActionError as e:
+                raise RoomError(str(e)) from None
+            q = self.kemudi.setdefault(p, [])
+            if (not q or q[-1] != a) and len(q) < 3:
+                q.append(a)
+            return
         # Jawaban selalu membawa nomor langkah. Klik yang sampai setelah waktunya habis DITOLAK, bukan dipakai untuk
         # langkah berikutnya (dulu ini membuat pemain tidak bisa memilih apa pun di ronde berikutnya).
         if not self._check_step(p, step):
@@ -763,6 +836,34 @@ class GameRoom:
             self.paused_at = now
         self.wake.set()
         return self.paused_at > 0
+
+    FOTO_MAKS = 40
+    FOTO_BYTES = 400_000
+
+    def add_foto(self, m: Member, data: Any) -> str:
+        """Host mengunggah foto (data URL base64 jpeg/png/webp). Disimpan di memori room dan ikut hilang saat room dihapus."""
+        import base64
+        if m.id != self.host_id:
+            raise RoomError("Hanya host yang bisa mengunggah foto.")
+        if len(self.foto) >= self.FOTO_MAKS:
+            raise RoomError(f"Maksimal {self.FOTO_MAKS} foto per room.")
+        raw = str(data or "")
+        head, _, b64 = raw.partition(",")
+        mime = head.removeprefix("data:").removesuffix(";base64")
+        if mime not in ("image/jpeg", "image/png", "image/webp") or not head.endswith(";base64"):
+            raise RoomError("Foto harus berupa gambar JPG, PNG, atau WEBP.")
+        if len(b64) > self.FOTO_BYTES * 4 // 3 + 8:
+            raise RoomError("Foto terlalu besar (maksimal ±400 KB setelah diperkecil).")
+        try:
+            blob = base64.b64decode(b64, validate=True)
+        except ValueError:
+            raise RoomError("Data foto rusak.") from None
+        sig = {"image/jpeg": b"\xff\xd8", "image/png": b"\x89PNG", "image/webp": b"RIFF"}[mime]
+        if not blob.startswith(sig):
+            raise RoomError("Isi file bukan gambar yang didukung.")
+        fid = secrets.token_hex(5)
+        self.foto[fid] = (mime, blob)
+        return fid
 
     def reset_sesi(self, m: Member) -> None:
         if m.id != self.host_id:

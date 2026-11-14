@@ -37,7 +37,7 @@ GRUP = {
 class Setting:
     id: str
     label: str
-    jenis: str                 # int | float | bool | pilihan
+    jenis: str                 # int | float | bool | pilihan | teks (isian bebas, butuh cleaner) | kartu
     default: Any
     min: float | None = None
     max: float | None = None
@@ -47,6 +47,7 @@ class Setting:
     jika: dict[str, Any] | None = None       # tampil hanya kalau setting lain bernilai ini: nilai, list nilai,
                                              # {"min": angka} (minimal sekian) atau {"bukan": nilai}
     cleaner: Callable[[Any], Any] | None = field(default=None, repr=False)   # jenis khusus (misalnya "kartu")
+    foto: bool = False         # isian "teks" yang boleh ditambah foto unggahan host (baris "foto:kode Nama")
 
     def clean(self, v: Any) -> Any:
         if self.cleaner is not None:
@@ -74,7 +75,7 @@ class Setting:
     def meta(self) -> dict[str, Any]:
         return {"id": self.id, "label": self.label, "jenis": self.jenis, "default": self.default,
                 "min": self.min, "max": self.max, "pilihan": self.pilihan, "ket": self.ket, "grup": self.grup,
-                "jika": self.jika}
+                "jika": self.jika, "foto": self.foto}
 
 
 def rng(state: dict[str, Any], *keys: Any) -> random.Random:
@@ -113,6 +114,8 @@ class Game:
     jeda_pada: tuple[str, ...] = ()  # jenis event yang menandai akhir ronde (dipakai untuk jeda lihat hasil)
     jeda_hasil: float = 0.0          # detik bawaan jeda lihat hasil setelah event di atas (kalau ada manusia)
     presets: list[dict[str, Any]] = []   # [{"id", "nama", "ket", "nilai": {setting: nilai}}] di luar "Standar"
+    bot: bool = True                 # False: hanya pemain manusia (misalnya game ketangkasan yang dihitung di browser)
+    bot_langkah: int = 20_000        # batas langkah kode bot per aksi (game real-time memakai batas lebih kecil)
 
     # ------------------------------------------------------------ wajib diisi game
     def init(self, cfg: dict[str, Any], names: list[str], seed: int) -> dict[str, Any]:
@@ -165,6 +168,11 @@ class Game:
         """Mode mandiri untuk pengaturan ini (game boleh punya mode bergiliran DAN mode balapan sendiri-sendiri)."""
         return self.mandiri
 
+    def detak(self, cfg: dict[str, Any]) -> float:
+        """> 0: game real-time berdetak (detik per langkah). Server melangkah sendiri tiap detak tanpa menunggu pemain;
+        pemain manusia mengirim perintah kapan saja (perintah terakhir dipakai di detak berikutnya)."""
+        return 0.0
+
     def jeda_bot(self, cfg: dict[str, Any]) -> float:
         """Jeda minimal (detik) antar aksi bot di mode mandiri, misalnya supaya bot tidak menyapu balapan melawan manusia."""
         return 0.0
@@ -211,7 +219,7 @@ class Game:
             "timer": self.timer, "mandiri": self.mandiri, "settings": [x.meta() for x in self.settings],
             "jeda_pada": list(self.jeda_pada), "jeda_hasil": self.jeda_hasil, "presets": self.all_presets(),
             "templates": self.templates, "lib_docs": self.all_docs(), "label_skor": self.label_skor,
-            "aturan": self.aturan, "format_aksi": self.format_aksi,
+            "aturan": self.aturan, "format_aksi": self.format_aksi, "bot": self.bot,
         }
 
 

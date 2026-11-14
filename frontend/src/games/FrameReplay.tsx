@@ -5,8 +5,8 @@ import { describeEvent, rendererFor } from './renderers';
 const SPEEDS = [0.5, 1, 2, 4];
 
 /** Pemutar replay umum: memutar frame tampilan publik satu per satu. */
-export function FrameReplay({ frames, meta, names, settings, me = null }: {
-  frames: Frame[]; meta: GameMeta; names: string[]; settings: Record<string, any>; me?: number | null;
+export function FrameReplay({ frames, meta, names, settings, me = null, kode }: {
+  frames: Frame[]; meta: GameMeta; names: string[]; settings: Record<string, any>; me?: number | null; kode?: string;
 }) {
   const [i, setI] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -48,14 +48,15 @@ export function FrameReplay({ frames, meta, names, settings, me = null }: {
         {lines.length > 0 && <div className="replay-events">{lines.map((l, k) => <span key={k}>{l}</span>)}</div>}
       </div>
       <R view={f.view} meta={meta} names={names} me={me} canAct={false} acted={false} act={() => undefined} replay events={f.events}
-        settings={settings} pending={[]} />
+        settings={settings} pending={[]} kode={kode} />
     </div>
   );
 }
 
 /** Replay dengan pilihan sudut pandang: semua rahasia terbuka, penonton (berkabut), atau seperti yang dilihat satu pemain. */
-export function ReplayPanel({ frames, meta, names, settings, replayId, initial = 'semua' }: {
+export function ReplayPanel({ frames, meta, names, settings, replayId, initial = 'semua', kode }: {
   frames: Frame[]; meta: GameMeta; names: string[]; settings: Record<string, any>; replayId?: string | null; initial?: 'semua' | number;
+  kode?: string;
 }) {
   const [kursi, setKursi] = useState<'semua' | number>(initial);
   const [alt, setAlt] = useState<Frame[] | null>(null);
@@ -96,7 +97,7 @@ export function ReplayPanel({ frames, meta, names, settings, replayId, initial =
       {err && <p className="bad">{err}</p>}
       {(frames.length > 1 || alt) && (
         <FrameReplay key={String(kursi) + (alt ? 'a' : 'f')} frames={alt ?? frames} meta={meta} names={names} settings={settings}
-          me={kursi === 'semua' || kursi < 0 ? null : kursi} />
+          me={kursi === 'semua' || kursi < 0 ? null : kursi} kode={kode} />
       )}
     </div>
   );

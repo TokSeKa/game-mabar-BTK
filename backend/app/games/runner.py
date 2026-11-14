@@ -41,7 +41,7 @@ def play_sync(game_id: str, cfg: dict[str, Any], names: list[str], codes: list[s
     g = GAMES[game_id]
     cfg = g.clean_settings(cfg)
     s = g.init(cfg, names, seed)
-    limits = Limits(max_steps=bot_steps)
+    limits = Limits(max_steps=min(bot_steps, g.bot_langkah))
     bots: list[BotSeat] = []
     for c in codes:
         comp, err = _compile(g, c)

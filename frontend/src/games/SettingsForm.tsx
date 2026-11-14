@@ -58,11 +58,79 @@ export function matchingPreset(meta: GameMeta, values: Record<string, any>): str
 }
 
 function shown(st: SettingMeta, v: any): string {
+  if (st.jenis === 'teks') {
+    const n = String(v ?? '').split('\n').filter((x) => x.trim()).length;
+    return n ? `${n} baris` : 'kosong';
+  }
   if (st.jenis === 'kartu') return Array.isArray(v) && v.length ? `${v.length} kartu: ${v.map((k: any) => `${k.simbol} ${k.nama}`).join(', ')}` : 'tidak ada';
   if (st.jenis === 'bool') return v ? 'ya' : 'tidak';
   if (st.jenis === 'pilihan') return st.pilihan?.find((p) => p[0] === v)?.[1] ?? String(v);
   if (typeof v === 'number') return v.toLocaleString('id-ID', { maximumFractionDigits: 3 });
   return String(v);
+}
+
+/** Perkecil foto di browser (maks 360 px, JPEG) sebelum diunggah, supaya ringan untuk semua pemain. */
+function kecilkanFoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 360 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * k));
+      c.height = Math.max(1, Math.round(img.height * k));
+      c.getContext('2d')?.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('File itu bukan gambar yang bisa dibaca.'));
+    };
+    img.src = url;
+  });
+}
+
+/** Isian teks bebas (satu item per baris), opsional dengan tombol unggah foto. */
+function TeksField({ st, val, disabled, onChange, uploadFoto }: {
+  st: SettingMeta; val: string; disabled?: boolean; onChange: (v: string) => void; uploadFoto?: (data: string) => Promise<string>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const onFiles = async (files: FileList | null) => {
+    if (!files?.length || !uploadFoto) return;
+    setBusy(true);
+    setErr('');
+    let text = val;
+    try {
+      for (const f of Array.from(files).slice(0, 10)) {
+        const data = await kecilkanFoto(f);
+        const id = await uploadFoto(data);
+        const nama = f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().slice(0, 30) || 'Foto';
+        text = `${text.trim() ? `${text.trimEnd()}\n` : ''}foto:${id} ${nama}`;
+        onChange(text);
+      }
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className={`field set-field wide ${val !== st.default ? 'changed' : ''}`}>
+      <span>{st.label}</span>
+      <textarea className="input set-teks" rows={4} value={val} disabled={disabled} spellCheck={false}
+        onChange={(e) => onChange(e.target.value)} />
+      {st.foto && uploadFoto && !disabled && (
+        <label className="btn small set-foto">
+          {busy ? '⏳ Mengunggah…' : '📷 Unggah foto'}
+          <input type="file" accept="image/*" multiple hidden disabled={busy} onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
+        </label>
+      )}
+      {err && <small className="bad">{err}</small>}
+      {st.ket && <small className="hint">{st.ket}</small>}
+    </div>
+  );
 }
 
 function Field({ st, val, disabled, onChange }: { st: SettingMeta; val: any; disabled?: boolean; onChange: (v: any) => void }) {
@@ -89,8 +157,9 @@ function Field({ st, val, disabled, onChange }: { st: SettingMeta; val: any; dis
 }
 
 /** Form pengaturan game: preset cepat, lalu pengaturan dikelompokkan (Dasar, Informasi, Aturan, Kejutan). */
-export function SettingsForm({ meta, values, onChange, disabled }: {
+export function SettingsForm({ meta, values, onChange, disabled, uploadFoto }: {
   meta: GameMeta; values: Record<string, any>; onChange: (v: Record<string, any>) => void; disabled?: boolean;
+  uploadFoto?: (data: string) => Promise<string>;
 }) {
   const [saved, setSaved] = useState<SavedPreset[]>(() => load<SavedPreset[]>(savedKey(meta.id), []));
   if (!meta.settings.length) return <p className="hint">Game ini tidak punya pengaturan.</p>;
@@ -145,6 +214,9 @@ export function SettingsForm({ meta, values, onChange, disabled }: {
                     onChange={(v) => onChange({ ...values, [st.id]: v })} />
                   {st.ket && <small className="hint">{st.ket}</small>}
                 </div>
+              ) : st.jenis === 'teks' ? (
+                <TeksField key={st.id} st={st} val={String(values[st.id] ?? st.default ?? '')} disabled={disabled} uploadFoto={uploadFoto}
+                  onChange={(v) => onChange({ ...values, [st.id]: v })} />
               ) : (
                 <Field key={st.id} st={st} val={values[st.id] ?? st.default} disabled={disabled}
                   onChange={(v) => onChange({ ...values, [st.id]: v })} />

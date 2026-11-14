@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { fmt, seatColor } from '../hubApi';
-import { ScoreBoard, TurnNote, type RenderProps } from './common';
+import { ScoreBoard, TurnNote, touchScreen, type RenderProps } from './common';
 
 const KEYMOVE: Record<string, string> = {
   ArrowUp: 'atas', ArrowDown: 'bawah', ArrowLeft: 'kiri', ArrowRight: 'kanan',
@@ -98,7 +98,7 @@ export function RRobot({ view, names, me, canAct, acted, act, replay }: RenderPr
             sees(r, c) ? null : <rect key={`f${r}-${c}`} x={c * cell} y={r * cell} width={cell} height={cell} className="ar-fog" />
           )))}
         </svg>
-        <TurnNote canAct={canAct} acted={acted} replay={replay} me={me}>Panah/WASD = jalan, Shift+panah atau IJKL = tembak, spasi = diam.</TurnNote>
+        <TurnNote canAct={canAct} acted={acted} replay={replay} me={me}>{touchScreen ? 'Ketuk panah untuk jalan, 💥 untuk tembak, • untuk diam.' : 'Panah/WASD = jalan, Shift+panah atau IJKL = tembak, spasi = diam.'}</TurnNote>
         {canAct && mine?.hidup && (
           <div className="robot-ctrl">
             <div className="pad">

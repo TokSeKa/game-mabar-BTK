@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type TouchEvent } from 'react';
 import { seatColor } from '../hubApi';
-import { NameChip, ScoreBoard, TurnNote, idxOf, type RenderProps } from './common';
+import { NameChip, ScoreBoard, TurnNote, idxOf, touchScreen, type RenderProps } from './common';
 
 const BIT: Record<string, number> = { atas: 1, kanan: 2, bawah: 4, kiri: 8 };
 const ARROW: Record<string, string> = { atas: '↑', bawah: '↓', kiri: '←', kanan: '→' };
@@ -106,6 +106,24 @@ export function RLabirin({ view, names, me, canAct, act, replay, tunggu }: Rende
     act(run ? `lari_${a}` : a);
   };
 
+  // HP: geser di peta untuk berjalan (geser panjang = lari menyusuri lorong)
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: TouchEvent) => {
+    const t = e.touches[0];
+    touch.current = t ? { x: t.clientX, y: t.clientY } : null;
+  };
+  const onTouchEnd = (e: TouchEvent) => {
+    const a0 = touch.current;
+    const t = e.changedTouches[0];
+    touch.current = null;
+    if (!a0 || !t) return;
+    const dx = t.clientX - a0.x, dy = t.clientY - a0.y;
+    const d = Math.max(Math.abs(dx), Math.abs(dy));
+    if (d < 24) return;
+    const a = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'kanan' : 'kiri') : (dy > 0 ? 'bawah' : 'atas');
+    move(a, lari || d > 140);
+  };
+
   useEffect(() => {
     if (!live) return;
     const onKey = (e: KeyboardEvent) => {
@@ -143,10 +161,12 @@ export function RLabirin({ view, names, me, canAct, act, replay, tunggu }: Rende
             <MazeSvg v={{ ...last, pemain: {}, koin: [], jebakan: [], portal: [] }} names={names} me={me} peta={last.peta} tali={last.tali} tanda={last.tanda} small />
           </details>
         )}
-        <TurnNote canAct={canAct} acted={false} replay={replay} me={me}>Cari pintu keluar 🚪{v.keluar ? '' : ' (lokasinya belum diketahui)'}.</TurnNote>
+        <TurnNote canAct={canAct} acted={false} replay={replay} me={me}>Cari pintu keluar 🚪{v.keluar ? '' : ' (lokasinya belum diketahui)'}.{touchScreen ? ' Geser di peta untuk jalan (geser jauh = lari).' : ''}</TurnNote>
         {finished && <div className="turn-note done">🏁 Kamu keluar di urutan ke-{v.pemain[myName!].urutan}! Menunggu yang lain…</div>}
         {!replay && me != null && !finished && (v.sisa_langkah ?? 1) <= 0 && <div className="turn-note">Jatah langkahmu habis untuk labirin ini.</div>}
-        <div className="lb-wrap"><MazeSvg v={v} names={names} me={me} /></div>
+        <div className={`lb-wrap ${live ? 'swipe' : ''}`} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          <MazeSvg v={v} names={names} me={me} />
+        </div>
         {me != null && !replay && v.posisi && (
           <p className="hint lb-status">
             Langkah {v.langkah} · sisa <b>{v.sisa_langkah}</b> · koin {v.pemain?.[myName!]?.koin ?? 0}

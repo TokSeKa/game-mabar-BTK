@@ -1,3 +1,4 @@
+import { Gambar } from './renderers/tebakgambar';
 import { useState } from 'react';
 import { NameChip } from './renderers/common';
 import { Grid } from './renderers/kapal';
@@ -47,7 +48,17 @@ function PokerReveal({ reveal, names }: { reveal: any; names: string[] }) {
 }
 
 /** Informasi rahasia yang dibuka setelah match selesai (khusus game tertentu). */
-export function Reveal({ gid, reveal, names, lastView }: { gid: string; reveal: any; names: string[]; lastView?: any }) {
+export function Reveal({ gid, reveal, names, lastView, kode }: { gid: string; reveal: any; names: string[]; lastView?: any; kode?: string }) {
+  if (gid === 'tebakgambar' && reveal?.gambar) {
+    return (
+      <div className="panel">
+        <h3>Gambar semua pemain</h3>
+        <div className="tg-reveal">
+          {names.map((n) => <div key={n} className="tg-reveal-item"><Gambar g={reveal.gambar[n]} kode={kode} /><b>{n}</b></div>)}
+        </div>
+      </div>
+    );
+  }
   if (gid === 'tycoon' && lastView?.riwayat?.length) {
     return (
       <div className="panel">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { seatColor } from '../hubApi';
 import { NameChip, ScoreBoard, TurnNote, idxOf, useResetState, type RenderProps } from './common';
 
@@ -41,7 +41,7 @@ function Grid({ rows, maks, input, small, showNames, names }: {
   ));
   if (input != null && rows.length < maks) {
     lines.push(
-      <div key="in" className="wd-row input">
+      <div key="in" className="wd-row wd-in">
         {showNames && <span className="wd-who" />}
         {Array.from({ length: 5 }, (_, i) => <Tile key={i} small={small} ch={input[i] ?? null} />)}
       </div>,
@@ -67,7 +67,7 @@ function Keyboard({ status, onKey, disabled, enterLabel }: {
         <div key={row} className="wd-kb-row">
           {r === 2 && <button type="button" className="wd-key wide" disabled={disabled} onClick={() => onKey('enter')}>{enterLabel}</button>}
           {[...row].map((ch) => (
-            <button type="button" key={ch} className={`wd-key ${status[ch] === 'H' ? 'h' : status[ch] === 'K' ? 'k' : status[ch] === 'A' ? 'a' : ''}`}
+            <button type="button" key={ch} className={`wd-key ${keyCls(status[ch])}`}
               disabled={disabled} onClick={() => onKey(ch)}>{ch.toUpperCase()}</button>
           ))}
           {r === 2 && <button type="button" className="wd-key wide" disabled={disabled} onClick={() => onKey('back')} aria-label="Hapus huruf">⌫</button>}
@@ -75,6 +75,53 @@ function Keyboard({ status, onKey, disabled, enterLabel }: {
       ))}
     </div>
   );
+}
+
+const keyCls = (c?: string) => (c === 'H' ? 'h' : c === 'K' ? 'k' : c === 'A' ? 'a' : '');
+
+/** Petunjuk warna huruf (tidak bisa dipencet): dipakai saat mengetik dengan keyboard HP. */
+function LetterHints({ status }: { status: Record<string, string> }) {
+  return (
+    <div className="wd-hints" aria-label="Status huruf">
+      {KEYS.map((row) => (
+        <div key={row} className="wd-hints-row">
+          {[...row].map((ch) => <span key={ch} className={`wd-hint ${keyCls(status[ch])}`}>{ch.toUpperCase()}</span>)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Semua tebakan (huruf + warna) tiap pemain untuk satu kata yang sudah selesai. */
+function RoundBoards({ r, names, me }: { r: any; names: string[]; me: number | null }) {
+  const papan: Record<string, Row[]> = r?.papan ?? {};
+  const order = Object.keys(papan).filter((n) => n !== 'bersama')
+    .sort((a, b) => (a === names[me ?? -1] ? -1 : b === names[me ?? -1] ? 1 : names.indexOf(a) - names.indexOf(b)));
+  if (!order.length) return null;
+  return (
+    <div className="wd-round-boards">
+      {order.map((n) => {
+        const h = r.hasil?.[n];
+        const rows = papan[n] ?? [];
+        return (
+          <div key={n} className={`wd-other wd-md ${h?.menang ? 'won' : 'lost'}`}>
+            <div className="row"><NameChip name={n} idx={idxOf(names, n)} />
+              <span className="hint">{h?.menang ? `✅ ${h.tebakan} tebakan` : '❌'} · +{h?.poin ?? 0}</span></div>
+            {rows.length ? <Grid rows={rows} maks={rows.length} /> : <div className="hint">tidak menebak</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const KB_KEY = 'mabar-wordle-keyboard';
+function initialKeyboard(): 'hp' | 'layar' {
+  try {
+    const saved = localStorage.getItem(KB_KEY);
+    if (saved === 'hp' || saved === 'layar') return saved;
+  } catch { /* penyimpanan tidak tersedia */ }
+  return typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches ? 'hp' : 'layar';
 }
 
 export function RWordle({ view, names, me, canAct, acted, act, replay, draft, tunggu }: RenderProps) {
@@ -87,17 +134,31 @@ export function RWordle({ view, names, me, canAct, acted, act, replay, draft, tu
   const cooling = (tunggu ?? 0) > 0;
   const status = useMemo(() => keyStatus(myRows), [myRows]);
 
-  const type = (k: string) => {
+  const [kb, setKb] = useState<'hp' | 'layar'>(initialKeyboard);
+  const inRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const chooseKb = (k: 'hp' | 'layar') => {
+    setKb(k);
+    try { localStorage.setItem(KB_KEY, k); } catch { /* abaikan */ }
+    if (k === 'hp') setTimeout(() => inRef.current?.focus(), 0);
+  };
+
+  const setText = (raw: string) => {
     if (!canAct) return;
-    if (k === 'enter') {
-      if (input.length === 5 && !cooling) act(input);
-      return;
-    }
-    const next = k === 'back' ? input.slice(0, -1) : input.length < 5 && /^[a-z]$/.test(k) ? input + k : input;
+    const next = raw.toLowerCase().replace(/[^a-z]/g, '').slice(0, 5);
     if (next === input) return;
     setInput(next);
     // kata lengkap yang terlihat di layar dikirim otomatis kalau waktu habis; selain itu baris dilewati
     draft?.(next.length === 5 ? next : '-');
+  };
+  const submit = () => {
+    if (canAct && input.length === 5 && !cooling) act(input);
+  };
+  const type = (k: string) => {
+    if (!canAct) return;
+    if (k === 'enter') submit();
+    else if (k === 'back') setText(input.slice(0, -1));
+    else if (/^[a-z]$/.test(k)) setText(input + k);
   };
 
   useEffect(() => {
@@ -120,6 +181,8 @@ export function RWordle({ view, names, me, canAct, acted, act, replay, draft, tu
   const others = names.filter((n) => n !== myName);
   const enterLabel = cooling ? `⏳ ${Math.ceil(tunggu ?? 0)}` : 'TEBAK';
   const selesai = !gantian && board?.selesai;
+  // kolom ketik tetap terpasang selama match (tidak dilepas sesaat setelah menebak) supaya keyboard HP tidak tertutup
+  const showType = !replay && me != null && !selesai;
 
   return (
     <div className="game-grid wd">
@@ -142,14 +205,39 @@ export function RWordle({ view, names, me, canAct, acted, act, replay, draft, tu
           <div className="wd-reveal">
             Kata sebelumnya: <b className="gold">{(last.jawaban ?? (myName && last.jawaban_pemain?.[myName]) ?? '?').toUpperCase()}</b>
             {last.urut?.length ? <> · tercepat {last.urut.slice(0, 3).join(', ')}</> : null}
+            {!gantian && (
+              <details className="wd-round-det" open>
+                <summary>Tebakan semua pemain</summary>
+                <RoundBoards r={last} names={names} me={me} />
+              </details>
+            )}
           </div>
         )}
-        {(gantian || me != null) && (
-          <div className="wd-main">
-            <Grid rows={myRows} maks={v.maks_tebakan} input={canAct || acted ? input : null} showNames={gantian} names={names} />
-          </div>
+        <div ref={boxRef} className="wd-box">
+          {(gantian || me != null) && (
+            <div className="wd-main" onClick={() => kb === 'hp' && canAct && inRef.current?.focus()}>
+              <Grid rows={myRows} maks={v.maks_tebakan} input={canAct || acted ? input : null} showNames={gantian} names={names} />
+            </div>
+          )}
+          {showType && kb === 'hp' && (
+            <form className="wd-type" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+              <input ref={inRef} className="wd-input" value={input} onChange={(e) => setText(e.target.value)}
+                placeholder={canAct ? 'ketik kata…' : 'tunggu giliran…'} aria-label="Ketik kata 5 huruf" maxLength={5} inputMode="text" enterKeyHint="send"
+                autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false}
+                onFocus={() => setTimeout(() => boxRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 300)} />
+              <button type="submit" className="btn primary wd-send" disabled={!canAct || input.length < 5 || cooling}>{enterLabel}</button>
+            </form>
+          )}
+        </div>
+        {canAct && kb === 'layar' && <Keyboard status={status} onKey={type} disabled={!canAct} enterLabel={enterLabel} />}
+        {showType && kb === 'hp' && <LetterHints status={status} />}
+        {showType && (
+          <p className="wd-kb-switch">
+            {kb === 'hp'
+              ? <button type="button" className="linklike" onClick={() => chooseKb('layar')}>⌨️ Pakai papan huruf di layar</button>
+              : <button type="button" className="linklike" onClick={() => chooseKb('hp')}>📱 Pakai keyboard HP / laptop biasa</button>}
+          </p>
         )}
-        {canAct && <Keyboard status={status} onKey={type} disabled={!canAct} enterLabel={enterLabel} />}
         {!gantian && others.length > 0 && (
           <div className="wd-others">
             {others.map((n) => {
@@ -182,6 +270,12 @@ export function RWordle({ view, names, me, canAct, acted, act, replay, draft, tu
                     </span>
                   ))}
                 </span>
+                {!gantian && r.papan && (
+                  <details className="wd-round-det">
+                    <summary>lihat tebakan</summary>
+                    <RoundBoards r={r} names={names} me={me} />
+                  </details>
+                )}
               </li>
             ))}
           </ul>

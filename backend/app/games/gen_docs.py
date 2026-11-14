@@ -18,12 +18,13 @@ OUT = ROOT / "docs" / "bot"
 
 
 def render_all() -> dict[str, str]:
-    files = {f"{g.id}.md": guide_markdown(g) + "\n" for g in GAMES.values()}
+    bots = [g for g in GAMES.values() if g.bot]       # game khusus manusia tidak punya panduan bot
+    files = {f"{g.id}.md": guide_markdown(g) + "\n" for g in bots}
     lines = ["# Panduan bot Arena Mabar", "",
              "Satu file per game. Salin isinya ke AI (ChatGPT, Claude, Gemini, dll.) lalu ceritakan strategi yang kamu mau.",
              "File ini dibuat otomatis dari definisi game (`python -m app.games.gen_docs`).", "",
              "| Game | Pemain | Fungsi bot | Panduan |", "|---|---|---|---|"]
-    for g in GAMES.values():
+    for g in bots:
         players = f"{g.min_pemain}" if g.min_pemain == g.max_pemain else f"{g.min_pemain}–{g.max_pemain}"
         lines.append(f"| {g.nama} | {players} | `def {g.fungsi_bot}():` | [{g.id}.md]({g.id}.md) |")
     files["README.md"] = "\n".join(lines) + "\n"

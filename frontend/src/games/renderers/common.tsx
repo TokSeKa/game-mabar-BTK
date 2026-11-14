@@ -21,6 +21,8 @@ export interface RenderProps {
   pending: number[];
   /** mode mandiri: sisa detik hukuman tunggu sebelum boleh beraksi lagi (misalnya tebakan salah di balapan) */
   tunggu?: number;
+  /** kode room (untuk foto unggahan host); kosong di replay yang tidak terikat room */
+  kode?: string;
 }
 
 export interface ScoreRow {
@@ -110,3 +112,6 @@ export function NameChip({ name, idx }: { name: string; idx: number }) {
 export function idxOf(names: string[], name: string | null | undefined): number {
   return name == null ? -1 : names.indexOf(name);
 }
+
+/** Layar sentuh (HP/tablet): dipakai untuk mengganti petunjuk keyboard dengan petunjuk sentuh. */
+export const touchScreen = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;

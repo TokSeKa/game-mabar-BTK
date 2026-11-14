@@ -20,6 +20,7 @@ export type MabarRoute =
 export const GAME_ART: Record<string, string> = {
   suit: '✊✌️✋', poker: '🂡🃁', kapal: '🚢💥', robot: '🤖◆', kartu: '🃏🐉', tycoon: '🍢🧋',
   lelang: '🔨💎', blotto: '🚩⚔️', kasdesa: '🏦🤝', duapertiga: '🔢🎯', farol: '🎡🏠', wordle: '🟩🔤', labirin: '🧭🚪', satu: '🟥🃏', evolusi: '🧬⬢', monopoli: '🏙️🎲',
+  domino: '⚄⚁', ular: '🐍🍎', tembak: '🎯🔫', hitunguang: '💵🧮', tebakgambar: '🖼️❓',
 };
 
 interface Props {
@@ -125,14 +126,15 @@ function GamePage({ meta, tab, go, toast }: { meta: GameMeta; tab: GameTab; go: 
         <span className="tag-mini">{KATEGORI_LABEL[meta.kategori]}</span>
       </div>
       <p className="hint gp-desc">{meta.ringkas}</p>
+      {meta.bot === false && <p className="hint">🙂 Game ketangkasan khusus pemain manusia (tanpa bot).</p>}
       <div className="tabs" role="tablist">
-        {TABS.map(([id, label]) => (
+        {TABS.filter(([id]) => meta.bot !== false || id === 'main' || id === 'liga').map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => go({ page: 'game', gid: meta.id, tab: id })}>{label}</button>
         ))}
       </div>
       {tab === 'main' && <CreateRoom meta={meta} go={go} />}
-      {tab === 'latihan' && <Practice meta={meta} toast={toast} />}
-      {tab === 'panduan' && <GuidePage meta={meta} />}
+      {tab === 'latihan' && meta.bot !== false && <Practice meta={meta} toast={toast} />}
+      {tab === 'panduan' && meta.bot !== false && <GuidePage meta={meta} />}
       {tab === 'liga' && <Liga meta={meta} />}
     </div>
   );
@@ -156,9 +158,11 @@ function CreateRoom({ meta, go }: { meta: GameMeta; go: (r: MabarRoute) => void 
           <label className="field">Waktu manusia per langkah (detik)
             <input type="number" min={3} max={300} value={waktu} onChange={(e) => setWaktu(Number(e.target.value))} />
           </label>
-          <label className="field">Jeda langkah bot (detik)
-            <input type="number" min={0} max={5} step={0.1} value={jeda} onChange={(e) => setJeda(Number(e.target.value))} />
-          </label>
+          {meta.bot !== false && (
+            <label className="field">Jeda langkah bot (detik)
+              <input type="number" min={0} max={5} step={0.1} value={jeda} onChange={(e) => setJeda(Number(e.target.value))} />
+            </label>
+          )}
           {meta.jeda_pada.length > 0 && (
             <label className="field">Jeda lihat hasil ronde (detik)
               <input type="number" min={0} max={30} step={1} value={jedaHasil} onChange={(e) => setJedaHasil(Number(e.target.value))} />
@@ -170,8 +174,9 @@ function CreateRoom({ meta, go }: { meta: GameMeta; go: (r: MabarRoute) => void 
           entry: { action: 'buat', game: meta.id, nama: name.trim(), settings: cfg, waktu, jeda, jeda_hasil: jedaHasil },
         })}>Buat room</button>
         <p className="hint">
-          Setelah room dibuat, bagikan kodenya. Di lobby kamu bisa menambah bot (dari template atau kodemu), mengganti kursimu jadi bot,
-          lalu mulai. Teman juga bisa menonton dan mengirim reaksi.
+          {meta.bot === false
+            ? 'Setelah room dibuat, bagikan kodenya ke teman lalu mulai. Teman juga bisa menonton dan mengirim reaksi.'
+            : 'Setelah room dibuat, bagikan kodenya. Di lobby kamu bisa menambah bot (dari template atau kodemu), mengganti kursimu jadi bot, lalu mulai. Teman juga bisa menonton dan mengirim reaksi.'}
         </p>
       </div>
       <article className="panel guide-body">

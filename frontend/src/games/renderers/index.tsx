@@ -11,6 +11,11 @@ import { RSatu } from './satu';
 import { RBlotto, RDuaPertiga, RFarol, RKasDesa, RLelang, RSuit } from './simple';
 import { RTycoon } from './tycoon';
 import { RWordle } from './wordle';
+import { RDomino } from './domino';
+import { RUlar } from './ular';
+import { RTembak } from './tembak';
+import { RHitungUang } from './hitunguang';
+import { RTebakGambar } from './tebakgambar';
 
 export type { RenderProps } from './common';
 
@@ -54,6 +59,11 @@ const RENDERERS: Record<string, ComponentType<RenderProps>> = {
   satu: RSatu,
   evolusi: REvolusi,
   monopoli: RMonopoli,
+  domino: RDomino,
+  ular: RUlar,
+  tembak: RTembak,
+  hitunguang: RHitungUang,
+  tebakgambar: RTebakGambar,
 };
 
 export function rendererFor(gid: string): ComponentType<RenderProps> {
@@ -153,6 +163,11 @@ export function describeEvent(e: any): string | null {
     case 'sonar': return `📡 ${e.penembak} memakai sonar di (${e.sonar[0]},${e.sonar[1]}): ${e.jumlah} petak kapal`;
     case 'lewati': return `⏭️ Giliran ${e.pemain} dilewati (kena ranjau)`;
     case 'tembak':
+      if (e.nomor != null) {
+        if (e.sandera) return e.tahan ? `🧍 ${e.pemain} menahan tembakan ke sandera (+10)` : `😱 ${e.pemain} menembak sandera! (−30)`;
+        if (e.meleset || !e.cincin) return e.ms == null ? null : `🎯 ${e.pemain} meleset${e.catatan ? ` (${e.catatan})` : ''}`;
+        return `🎯 ${e.pemain}: cincin ${e.cincin} dalam ${e.ms} ms → +${e.poin}`;
+      }
       if (e.hasil === 'ranjau') return `💥 ${e.penembak} menembak ranjau di (${e.baris},${e.kolom})! Giliran berikutnya dilewati`;
       if (e.hasil) return `${e.penembak} → (${e.baris},${e.kolom}): ${e.hasil}${e.ukuran ? ` kapal ${e.ukuran}` : ''}`;
       return `${e.pemain} menembak ${e.arah}${e.kena ? `, kena ${e.kena}` : ''}`;
@@ -172,12 +187,17 @@ export function describeEvent(e: any): string | null {
     case 'akhir': return `🏁 Selesai. Bertahan: ${Object.entries(e.hidup ?? {}).map(([n, x]) => `${n} ${x}`).join(', ')}`;
     case 'kemajuan': return `${e.pemain}: lantai ${e.lantai}, ${e.fase} (skor ${e.skor})`;
     case 'tebak': {
+      if (e.tebakan != null) {
+        if (e.benar) return `🎉 ${e.pemain} menebak "${e.tebakan}" — BENAR! Gambarnya ${e.gambar?.emoji ?? ''} ${e.gambar?.nama ?? ''} (+${e.poin})`;
+        return e.kalah ? `💀 ${e.pemain} menebak "${e.tebakan}" — salah, kesempatan habis. Gambarnya ${e.gambar?.emoji ?? ''} ${e.gambar?.nama ?? ''}`
+          : `❌ ${e.pemain} menebak "${e.tebakan}" — salah (sisa ${e.sisa} kesempatan)`;
+      }
       if (e.lewat) return `${e.pemain}: baris ${e.baris} hangus`;
       const kotak = e.warna ? [...e.warna].map((c: string) => (c === 'H' ? '🟩' : c === 'K' ? '🟨' : c === '?' ? '❔' : '⬜')).join('') : '▫️▫️▫️▫️▫️';
       return `${e.pemain} menebak ${e.kata ? e.kata.toUpperCase() : '•••••'} ${kotak}${e.bantu ? ' (+1 huruf hijau baru)' : ''}`;
     }
     case 'benar': return `🎉 ${e.pemain} menebak benar di baris ${e.baris} (urutan ke-${e.urutan}, +${e.poin})`;
-    case 'lewat': return `${e.pemain} melewati giliran`;
+    case 'lewat': return e.ujung !== undefined ? `${e.pemain} lewat${e.ujung ? ` (ujung ${e.ujung[0]} | ${e.ujung[1]})` : ''}${e.denda ? `, denda −${e.denda}` : ''}` : `${e.pemain} melewati giliran`;
     case 'kata': {
       const jw = e.jawaban ? e.jawaban.toUpperCase() : Object.entries(e.jawaban_pemain ?? {}).map(([n, w]) => `${n}: ${String(w).toUpperCase()}`).join(', ');
       const m = Object.entries(e.hasil ?? {}).filter(([, h]: [string, any]) => h.menang).map(([n, h]: [string, any]) => `${n} +${h.poin}`);
@@ -200,7 +220,9 @@ export function describeEvent(e: any): string | null {
       const ikon: Record<string, string> = { merah: '🟥', kuning: '🟨', hijau: '🟩', biru: '🟦', liar: '🌈' };
       return `${e.pemain} main ${ikon[k.warna] ?? ''}${k.teks}${k.warna === 'liar' ? ` → ${ikon[e.warna] ?? e.warna}` : ''}${e.target ? ` ke ${e.target}` : ''} (sisa ${e.sisa})`;
     }
-    case 'ambil': return e.kena ? `${e.pemain} kena ${e.kena}: ambil ${e.jumlah ?? '?'} kartu` : `${e.pemain} mengambil ${e.jumlah ?? 'beberapa'} kartu${e.tumpukan ? ' (tumpukan)' : ''}`;
+    case 'ambil':
+      if (e.sisa_tumpukan != null) return `${e.pemain} ${e.bom ? 'kena bom, ' : ''}mengambil kartu dari tumpukan (sisa ${e.sisa_tumpukan})`;
+      return e.kena ? `${e.pemain} kena ${e.kena}: ambil ${e.jumlah ?? '?'} kartu` : `${e.pemain} mengambil ${e.jumlah ?? 'beberapa'} kartu${e.tumpukan ? ' (tumpukan)' : ''}`;
     case 'teriak': return `📢 ${e.pemain}: SATU!`;
     case 'lupa_satu': return `😅 ${e.pemain} lupa teriak SATU! Tarik ${e.jumlah} kartu`;
     case 'dilewati': return `⊘ ${e.pemain} dilewati`;
@@ -239,6 +261,22 @@ export function describeEvent(e: any): string | null {
     case 'bangkrut': return `💀 ${e.pemain} bangkrut${e.ke ? `, hartanya ke ${e.ke}` : ''}`;
     case 'jackpot': return `🅿️ ${e.pemain} dapat jackpot Parkir Bebas ${e.jumlah}`;
     case 'giliran': return null;
+    case 'tempel': return `${e.pemain} menempel ${e.kartu[0]}-${e.kartu[1]} di ${e.sisi} → ujung ${e.ujung[0]} | ${e.ujung[1]}${e.sisa <= 1 ? ` (sisa ${e.sisa} kartu!)` : ''}`;
+    case 'bom': return e.ambil ? `💣 ${e.pemain} menempel 0-0: ${e.korban} wajib ambil ${e.ambil} kartu` : `💣 ${e.pemain} menempel 0-0: ${e.korban} kena denda ${e.denda}`;
+    case 'makan': return e.buah === 'apel' ? null : `${e.buah === 'emas' ? '⭐' : '🤢'} ${e.pemain} makan buah ${e.buah} (${e.poin > 0 ? '+' : ''}${e.poin})`;
+    case 'tumbang': return `💥 ${e.pemain} tumbang${({ tepi: ' menabrak tepi', tembok: ' menabrak tembok', badan: '', adu_kepala: ' (adu kepala)' } as Record<string, string>)[e.sebab] ?? ''}${e.oleh ? ` — menabrak badan ${e.oleh} (+2 untuk ${e.oleh})` : ''}${e.keluar ? ', keluar dari ronde' : ''}`;
+    case 'jawab':
+      if (e.lewat) return `${e.pemain} menyerah untuk gepok ini`;
+      return e.benar ? `💰 ${e.pemain} menghitung BENAR (urutan ke-${e.urutan}, +${e.poin})` : `❌ ${e.pemain} salah hitung (${e.poin})${e.habis ? ', kesempatan habis' : ''}`;
+    case 'tanya': return `❓ ${e.pemain}: ${e.tanya}`;
+    case 'dijawab': return `💬 Jawaban untuk ${e.pemain}: ${Object.entries(e.rangkum ?? {}).map(([w, k]) => `${String(w).replace('_', ' ')} ×${k}`).join(', ')}`;
+    case 'habis_waktu': return `⌛ ${e.pemain} belum menebak — gambarnya ${e.gambar?.emoji ?? ''} ${e.gambar?.nama ?? ''}`;
+    case 'ronde_selesai': {
+      if (e.cara) return `🏁 Ronde ${e.ronde}: ${e.pemenang} menang (${e.cara === 'habis' ? 'kartu habis' : 'meja buntu'})${e.kali > 1 ? ' ×2 tutup balak!' : ''}`;
+      if (e.total != null) return `💰 Gepok ${e.ronde}: totalnya Rp${Number(e.total).toLocaleString('id-ID')}${e.urut?.length ? ` · tercepat ${e.urut.slice(0, 3).join(', ')}` : ' · tidak ada yang benar'}`;
+      if (e.rata_ms) return `🎯 Ronde ${e.ronde} selesai: ${Object.entries(e.poin ?? {}).sort((a: any, b: any) => b[1] - a[1]).map(([n, p]) => `${n} ${p}`).join(', ')}`;
+      return `🐍 Ronde ${e.ronde} selesai${e.terpanjang ? `, terpanjang ${e.terpanjang} (+5)` : ''}`;
+    }
     default: return null;
   }
 }

@@ -5,7 +5,9 @@ import type { BotErrorInfo, LibDoc } from '../types';
 export interface SettingMeta {
   id: string;
   label: string;
-  jenis: 'int' | 'float' | 'bool' | 'pilihan' | 'kartu';
+  jenis: 'int' | 'float' | 'bool' | 'pilihan' | 'kartu' | 'teks';
+  /** isian teks yang boleh ditambah foto unggahan host */
+  foto?: boolean;
   default: number | boolean | string | any[];
   min: number | null;
   max: number | null;
@@ -53,6 +55,8 @@ export interface GameMeta {
   presets: PresetMeta[];
   /** contoh isian kustom (misalnya kartu power Satu!) untuk editor di lobby */
   contoh_kustom?: KartuKustom[];
+  /** false: game khusus manusia (tanpa bot) */
+  bot?: boolean;
 }
 
 /** Kartu power kustom Satu! (efeknya ditulis dengan kode). */
@@ -166,6 +170,8 @@ export interface UpdateMsg {
   mandiri?: boolean;
   /** mode mandiri: waktu server (detik) sampai kursiku boleh beraksi lagi (hukuman), 0 = tidak ada */
   tunggu?: number;
+  /** game real-time: detik per langkah */
+  detak?: number | null;
 }
 
 export interface HubSession {

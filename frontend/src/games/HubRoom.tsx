@@ -41,12 +41,15 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
   const [start, setStart] = useState<StartInfo | null>(null);
   const [upd, setUpd] = useState<UpdateMsg | null>(null);
   const [actedStep, setActedStep] = useState(-1);
+  const fotoWait = useRef(new Map<string, (id: string) => void>());
   const [sent, setSent] = useState<{ step: number; aksi: unknown } | null>(null);
   const [done, setDone] = useState<{ step: number; seats: number[] }>({ step: -1, seats: [] });
   const [siap, setSiap] = useState<{ step: number; seats: number[] }>({ step: -1, seats: [] });
   const [log, setLog] = useState<string[]>([]);
   const [final, setFinal] = useState<FinalMsg | null>(null);
   const [showFinal, setShowFinal] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [reacts, setReacts] = useState<{ id: number; nama: string; emoji: string; x: number }[]>([]);
   const [notif, setNotif] = useState(alertsEnabled);
   const sock = useRef<RoomSocket | null>(null);
@@ -143,6 +146,14 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
           setActedStep(m.step);
           setSent({ step: m.step, aksi: m.aksi });
           break;
+        case 'foto_ok': {
+          const done = fotoWait.current.get(String(m.ref));
+          if (done) {
+            fotoWait.current.delete(String(m.ref));
+            done(String(m.id));
+          }
+          break;
+        }
         case 'batal_ok':
           setActedStep(-1);
           setSent(null);
@@ -240,6 +251,20 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
 
   const tagOf = (u: UpdateMsg) => u.versi ?? u.step;
 
+  /** Unggah foto (data URL yang sudah diperkecil) ke room; hasilnya kode foto. Hanya host. */
+  const uploadFoto = (data: string) => new Promise<string>((resolve, reject) => {
+    const ref = Math.random().toString(36).slice(2);
+    fotoWait.current.set(ref, resolve);
+    if (!sock.current?.send({ type: 'foto', data, ref })) {
+      fotoWait.current.delete(ref);
+      reject(new Error('Belum tersambung.'));
+      return;
+    }
+    window.setTimeout(() => {
+      if (fotoWait.current.delete(ref)) reject(new Error('Unggah foto gagal (cek ukuran/format, atau koneksi).'));
+    }, 20000);
+  });
+
   /** Kirim aksi untuk langkah yang SEDANG tampil. Server menolak kalau langkah itu ternyata sudah lewat. */
   const act = (a: unknown) => {
     if (!upd) return;
@@ -286,39 +311,50 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
   const invite = `${location.origin}${location.pathname}#main-room-${lobby.kode}`;
   return (
     <div className="hub-room">
-      <div className="hub-head panel">
-        <div className="row">
-          <b className="rh-game">{meta.nama}</b>
+      <div className={`hub-head panel ${menu ? 'menu-open' : ''} ${emojiOpen ? 'emoji-open' : ''}`}>
+        <div className="rh-line">
+          <b className="rh-game" title={meta.nama}>{meta.nama}</b>
           <span className="room-code" aria-label="Kode room">{lobby.kode}</span>
-          <button type="button" className="btn small" onClick={async () => toast((await copyText(invite)) ? 'Link undangan tersalin.' : invite)}>Salin link undangan</button>
-          <span className={`status-pill ${status === 'open' ? 'ok' : 'warn'}`}>{status === 'open' ? 'tersambung' : 'menyambung…'}</span>
-          <button type="button" className="btn small" aria-pressed={notif} title="Getar, bunyi, dan judul tab berkedip saat giliranmu"
+          <span className={`status-pill ${status === 'open' ? 'ok' : 'warn'}`} title={status === 'open' ? 'tersambung' : 'menyambung…'}>
+            <span className="rh-dot" aria-hidden="true" /><span className="rh-lbl">{status === 'open' ? 'tersambung' : 'menyambung…'}</span>
+          </span>
+          <span className="spacer" />
+          <button type="button" className="btn small rh-icon" title="Salin link undangan" aria-label="Salin link undangan"
+            onClick={async () => toast((await copyText(invite)) ? 'Link undangan tersalin.' : invite)}>🔗<span className="rh-lbl"> Salin link undangan</span></button>
+          <button type="button" className="btn small rh-icon" aria-pressed={notif} title="Getar, bunyi, dan judul tab berkedip saat giliranmu"
             onClick={() => {
               unlockAudio();
               setNotif(!notif);
               setAlertsEnabled(!notif);
             }}>{notif ? '🔔' : '🔕'}</button>
-          <span className="spacer" />
+          <button type="button" className="btn small rh-icon rh-toggle" aria-expanded={emojiOpen} aria-label="Reaksi" title="Kirim reaksi"
+            onClick={() => setEmojiOpen(!emojiOpen)}>😀</button>
+          <button type="button" className="btn small rh-icon rh-toggle" aria-expanded={menu} aria-label="Menu room" title="Hapus room / keluar"
+            onClick={() => setMenu(!menu)}>⋯</button>
+        </div>
+        <div className="rh-extra">
           <div className="react-bar" role="group" aria-label="Kirim reaksi">
             {EMOJI.map((e) => <button key={e} type="button" onClick={() => send({ type: 'reaksi', emoji: e })} aria-label={`Reaksi ${e}`}>{e}</button>)}
           </div>
-          {me != null && lobby.host_id === me && (
-            <button type="button" className="btn small danger" title="Hapus room ini untuk semua orang"
-              onClick={() => window.confirm(lobby.status === 'main'
-                ? 'Hapus room ini sekarang? Match yang sedang berjalan dihentikan dan semua orang dikeluarkan.'
-                : 'Hapus room ini? Semua orang di room akan dikeluarkan.') && send({ type: 'hapus_room' })}>🗑️ Hapus room</button>
-          )}
-          <button type="button" className="btn small danger" onClick={() => {
-            if (lobby.status === 'main' && !window.confirm('Match sedang berjalan. Keluar sekarang? Kursimu akan memakai aksi bawaan. (Masuk lagi dengan nama yang sama untuk kembali ke kursimu.)')) return;
-            if (!sock.current?.send({ type: 'keluar' })) {
-              clearSession();
-              onExit();
-            }
-          }}>Keluar</button>
+          <div className="rh-menu">
+            {me != null && lobby.host_id === me && (
+              <button type="button" className="btn small danger" title="Hapus room ini untuk semua orang"
+                onClick={() => window.confirm(lobby.status === 'main'
+                  ? 'Hapus room ini sekarang? Match yang sedang berjalan dihentikan dan semua orang dikeluarkan.'
+                  : 'Hapus room ini? Semua orang di room akan dikeluarkan.') && send({ type: 'hapus_room' })}>🗑️ Hapus room</button>
+            )}
+            <button type="button" className="btn small danger" onClick={() => {
+              if (lobby.status === 'main' && !window.confirm('Match sedang berjalan. Keluar sekarang? Kursimu akan memakai aksi bawaan. (Masuk lagi dengan nama yang sama untuk kembali ke kursimu.)')) return;
+              if (!sock.current?.send({ type: 'keluar' })) {
+                clearSession();
+                onExit();
+              }
+            }}>Keluar</button>
+          </div>
         </div>
       </div>
 
-      {phase === 'lobby' && <Lobby lobby={lobby} meta={meta} me={me} send={send} />}
+      {phase === 'lobby' && <Lobby lobby={lobby} meta={meta} me={me} send={send} uploadFoto={uploadFoto} />}
       {phase === 'main' && (
         <Live lobby={lobby} meta={meta} me={me} start={start} upd={upd} log={log} actedStep={actedStep} done={done} offset={offset.current}
           conn={status} siap={siap} sent={sent} notif={notif} act={act} draft={draft}
@@ -376,7 +412,9 @@ function SesiTable({ rows, isHost, onReset }: { rows: SesiRow[]; isHost: boolean
   );
 }
 
-function Lobby({ lobby, meta, me, send }: { lobby: LobbyMsg; meta: GameMeta; me: string | null; send: (m: object) => void }) {
+function Lobby({ lobby, meta, me, send, uploadFoto }: {
+  lobby: LobbyMsg; meta: GameMeta; me: string | null; send: (m: object) => void; uploadFoto: (data: string) => Promise<string>;
+}) {
   const isHost = lobby.host_id === me;
   const mySeat = lobby.kursi.find((k) => k.owner === me && k.self) ?? null;
   const [code, setCode] = useState(() => loadBotCode(meta));
@@ -435,10 +473,12 @@ function Lobby({ lobby, meta, me, send }: { lobby: LobbyMsg; meta: GameMeta; me:
         {mySeat && (
           <div className="panel">
             <h3>Kursimu: {mySeat.name}</h3>
-            <div className="tabs" role="tablist">
-              <button type="button" role="tab" aria-selected={mySeat.kind === 'manusia'} onClick={() => send({ type: 'jadi_manusia' })}>🙂 Main sendiri</button>
-              <button type="button" role="tab" aria-selected={mySeat.kind === 'bot'} onClick={() => setEditor(true)}>🤖 Pakai bot</button>
-            </div>
+            {meta.bot !== false && (
+              <div className="tabs" role="tablist">
+                <button type="button" role="tab" aria-selected={mySeat.kind === 'manusia'} onClick={() => send({ type: 'jadi_manusia' })}>🙂 Main sendiri</button>
+                <button type="button" role="tab" aria-selected={mySeat.kind === 'bot'} onClick={() => setEditor(true)}>🤖 Pakai bot</button>
+              </div>
+            )}
             <p className="hint">
               {mySeat.kind === 'manusia'
                 ? `Kamu yang memutuskan setiap langkah (waktu ${lobby.waktu} detik; kalau habis, pilihan yang sedang terlihat di layarmu dikirim otomatis).`
@@ -447,6 +487,12 @@ function Lobby({ lobby, meta, me, send }: { lobby: LobbyMsg; meta: GameMeta; me:
           </div>
         )}
 
+        {meta.bot === false ? (
+          <div className="panel">
+            <h3>Khusus manusia</h3>
+            <p className="hint">Game ini hanya untuk pemain manusia (tanpa bot). Bagikan link undangan supaya teman ikut main.</p>
+          </div>
+        ) : (
         <div className="panel">
           <h3>Tambah bot</h3>
           <label className="field">Kode bot
@@ -464,13 +510,14 @@ function Lobby({ lobby, meta, me, send }: { lobby: LobbyMsg; meta: GameMeta; me:
           </div>
           {full && <p className="hint">Kursi penuh.</p>}
         </div>
+        )}
 
         <div className="panel">
           <h3>Aturan room</h3>
           {isHost ? (
             <>
               <ActiveRules meta={meta} values={lobby.settings} />
-              <SettingsForm meta={meta} values={cfg} onChange={setCfg} />
+              <SettingsForm meta={meta} values={cfg} onChange={setCfg} uploadFoto={uploadFoto} />
               {dirty && <p className="hint">⚠️ Ada perubahan yang belum disimpan. Pemain lain baru melihatnya setelah kamu menekan <b>Simpan aturan</b>.</p>}
               <details className="set-group" open>
                 <summary>⏱️ Waktu & penonton</summary>
@@ -478,9 +525,11 @@ function Lobby({ lobby, meta, me, send }: { lobby: LobbyMsg; meta: GameMeta; me:
                   <label className="field">Waktu manusia (detik)
                     <input type="number" min={3} max={300} value={waktu} onChange={(e) => setWaktu(Number(e.target.value))} />
                   </label>
-                  <label className="field">Jeda langkah bot (detik)
-                    <input type="number" min={0} max={5} step={0.1} value={jeda} onChange={(e) => setJeda(Number(e.target.value))} />
-                  </label>
+                  {meta.bot !== false && (
+                    <label className="field">Jeda langkah bot (detik)
+                      <input type="number" min={0} max={5} step={0.1} value={jeda} onChange={(e) => setJeda(Number(e.target.value))} />
+                    </label>
+                  )}
                   {pakaiJeda && (
                     <label className="field">Jeda lihat hasil ronde (detik)
                       <input type="number" min={0} max={30} step={1} value={jedaHasil} onChange={(e) => setJedaHasil(Number(e.target.value))} />
@@ -529,7 +578,7 @@ function Lobby({ lobby, meta, me, send }: { lobby: LobbyMsg; meta: GameMeta; me:
             <span className="hint">Menunggu host memulai match…</span>
           )}
         </div>
-        {editor && (
+        {editor && meta.bot !== false && (
           <div className="panel">
             <h3>Editor bot · {meta.nama}</h3>
             <HubBotPanel meta={meta} code={code} setCode={setCode} compact>
@@ -629,7 +678,8 @@ function Live({ lobby, meta, me, start, upd, log, actedStep, done, offset, act, 
   const serverNow = Date.now() / 1000 - offset;
   const remaining = upd && humanTimer ? Math.max(0, upd.deadline - (paused ? upd.dijeda_sejak! : serverNow)) : 0;
   const timeUp = humanTimer && remaining <= 0 && !paused;
-  const canAct = !!upd && upd.my_turn && mine && actedStep !== upd.step && online && !paused && !timeUp;
+  // game real-time (detak): perintah boleh dikirim berkali-kali dalam satu langkah (server mengantre)
+  const canAct = !!upd && upd.my_turn && mine && (actedStep !== upd.step || !!upd.detak) && online && !paused && !timeUp;
   useTurnAlert(canAct && upd ? `${upd.step}:${upd.versi ?? ''}` : null, remaining, notif);
 
   if (start?.instan) {
@@ -659,13 +709,23 @@ function Live({ lobby, meta, me, start, upd, log, actedStep, done, offset, act, 
       {paused && (
         <div className="conn-banner pause-host" role="status">⏸ Match dijeda host. Waktu berhenti dan pilihan dikunci sampai host melanjutkan.</div>
       )}
-      {humanTimer && (
-        <div className={`timer ${remaining < 5 ? 'low' : ''}`} aria-label={`Sisa waktu ${Math.ceil(remaining)} detik`}>
-          <i style={{ width: `${Math.min(100, (remaining / Math.max(total, 1)) * 100)}%` }} />
-          <span>{paused ? '⏸ ' : ''}{Math.ceil(remaining)} dtk</span>
+      {(humanTimer || isHost) && (
+        <div className="live-top">
+          {humanTimer ? (
+            <div className={`timer ${remaining < 5 ? 'low' : ''}`} aria-label={`Sisa waktu ${Math.ceil(remaining)} detik`}>
+              <i style={{ width: `${Math.min(100, (remaining / Math.max(total, 1)) * 100)}%` }} />
+              <span>{paused ? '⏸ ' : ''}{Math.ceil(remaining)} dtk</span>
+            </div>
+          ) : <span className="spacer" />}
+          {isHost && (
+            <button type="button" className="btn small live-pause" onClick={pause} title={paused ? 'Lanjutkan match' : 'Jeda match'}
+              aria-label={paused ? 'Lanjutkan match' : 'Jeda match'}>
+              {paused ? '▶' : '⏸'}<span className="lbl">{paused ? ' Lanjutkan match' : ' Jeda match'}</span>
+            </button>
+          )}
         </div>
       )}
-      {(isHost || mySent || timeUp) && (
+      {(mySent || timeUp) && (
         <div className="live-bar row">
           {mySent && !mandiri && (
             <span className="sent-chip">✅ Jawabanmu: <b>{describeAction(mySent.aksi)}</b></span>
@@ -674,8 +734,6 @@ function Live({ lobby, meta, me, start, upd, log, actedStep, done, offset, act, 
             <button type="button" className="btn small" onClick={ubah}>✏️ Ubah</button>
           )}
           {timeUp && upd.pending.includes(mySeat) && !acted && <span className="hint">⏳ Waktu habis, pilihan di layarmu dikirim otomatis…</span>}
-          <span className="spacer" />
-          {isHost && <button type="button" className="btn small" onClick={pause}>{paused ? '▶ Lanjutkan match' : '⏸ Jeda match'}</button>}
         </div>
       )}
       {jeda && (
@@ -697,7 +755,7 @@ function Live({ lobby, meta, me, start, upd, log, actedStep, done, offset, act, 
       )}
       <R view={upd.view} meta={meta} names={names} me={upd.seat} canAct={canAct} acted={acted} replay={false} events={upd.events}
         settings={lobby.settings} pending={upd.pending} act={act} draft={draft}
-        tunggu={upd.tunggu ? Math.max(0, upd.tunggu - (paused ? upd.dijeda_sejak! : serverNow)) : 0} />
+        tunggu={upd.tunggu ? Math.max(0, upd.tunggu - (paused ? upd.dijeda_sejak! : serverNow)) : 0} kode={lobby.kode} />
       <div className="live-foot">
         {waiting.length > 0 && <span className="hint">Menunggu: {waiting.join(', ')}</span>}
         <ActiveRules meta={meta} values={lobby.settings} />
@@ -744,10 +802,10 @@ function Results({ final, meta, lobby, me, onBack }: { final: FinalMsg; meta: Ga
         <ActiveRules meta={meta} values={lobby.settings} />
       </div>
       <SesiTable rows={lobby.sesi ?? []} isHost={false} />
-      <Reveal gid={meta.id} reveal={final.reveal} names={final.names} lastView={final.frames[final.frames.length - 1]?.view} />
+      <Reveal gid={meta.id} reveal={final.reveal} names={final.names} lastView={final.frames[final.frames.length - 1]?.view} kode={lobby.kode} />
       {(final.frames.length > 1 || final.replay_id) && (
         <ReplayPanel frames={final.frames} meta={meta} names={final.names} settings={lobby.settings} replayId={final.replay_id}
-          initial="semua" key={final.replay_id ?? 'x'} />
+          initial="semua" key={final.replay_id ?? 'x'} kode={lobby.kode} />
       )}
       {Object.entries(final.logs ?? {}).map(([n, lg]) => <HubBotLog key={n} name={n} log={lg} />)}
     </div>
