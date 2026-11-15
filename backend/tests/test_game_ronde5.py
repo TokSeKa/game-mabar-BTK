@@ -340,6 +340,7 @@ def test_room_detak_ular_jalan_sendiri_dan_belok(client):
         a.send_json({"type": "mulai"})
         u = until(a, "update", pred=lambda m: m["view"]["mulai_dalam"] == 0, limit=200)
         assert u["detak"] == pytest.approx(1 / 12) and u["mandiri"]
+        assert u["my_turn"] and u["pending"] == [0]          # tanpa ini browser mengabaikan panah/WASD
         arah = u["view"]["ular"]["Ani"]["arah"]
         belok = {"atas": "kiri", "bawah": "kanan", "kiri": "bawah", "kanan": "atas"}[arah]
         a.send_json({"type": "aksi", "aksi": belok})           # tanpa nomor langkah: masuk antrean detak

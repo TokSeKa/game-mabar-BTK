@@ -681,6 +681,7 @@ class GameRoom:
                 pend = g.pending(s)
                 if not pend:
                     break
+                self.pending = sorted(pend)      # klien memakai ini untuk "my_turn" (tanpa ini kontrol keyboard diabaikan)
                 self.step += 1
                 acts: dict[int, Any] = {}
                 for p in pend:
