@@ -735,8 +735,11 @@ class GameRoom:
             except ActionError as e:
                 raise RoomError(str(e)) from None
             q = self.kemudi.setdefault(p, [])
-            if (not q or q[-1] != a) and len(q) < 3:
-                q.append(a)
+            if not q or q[-1] != a:
+                if len(q) < 3:
+                    q.append(a)
+                else:
+                    q[-1] = a        # antrean penuh (joystick bergerak cepat): pakai perintah terbaru, jangan menumpuk lag
             return
         # Jawaban selalu membawa nomor langkah. Klik yang sampai setelah waktunya habis DITOLAK, bukan dipakai untuk
         # langkah berikutnya (dulu ini membuat pemain tidak bisa memilih apa pun di ronde berikutnya).

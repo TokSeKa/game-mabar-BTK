@@ -16,6 +16,7 @@ import { RUlar } from './ular';
 import { RTembak } from './tembak';
 import { RHitungUang } from './hitunguang';
 import { RTebakGambar } from './tebakgambar';
+import { RRobotTarung } from './robottarung';
 
 export type { RenderProps } from './common';
 
@@ -64,6 +65,7 @@ const RENDERERS: Record<string, ComponentType<RenderProps>> = {
   tembak: RTembak,
   hitunguang: RHitungUang,
   tebakgambar: RTebakGambar,
+  robottarung: RRobotTarung,
 };
 
 export function rendererFor(gid: string): ComponentType<RenderProps> {
@@ -178,7 +180,9 @@ export function describeEvent(e: any): string | null {
     case 'badai': return `🌀 ${e.pemain} terkena badai di luar zona (−1 nyawa)`;
     case 'zona': return `🌀 Zona aman menyempit: baris/kolom ${e.zona[0]}–${e.zona[1]}`;
     case 'bangkit': return e.pemilik ? `🌱 Spesies ${e.pemilik} muncul lagi di sarangnya` : `${e.pemain} bangkit lagi`;
-    case 'mulai': return e.desain ? `🧬 Desain: ${Object.entries(e.desain).map(([n, d]: [string, any]) => `${n} 👁️${d.pandangan} 🐾${d.kelincahan} 🦣${d.ukuran}`).join(' · ')}` : null;
+    case 'mulai':
+      if (e.ronde != null && !e.desain) return `🔔 Ronde ${e.ronde}: TARUNG!`;
+      return e.desain ? `🧬 Desain: ${Object.entries(e.desain).map(([n, d]: [string, any]) => `${n} 👁️${d.pandangan} 🐾${d.kelincahan} 🦣${d.ukuran}`).join(' · ')}` : null;
     case 'lahir': return `🍼 ${e.pemilik}: ${e.nama} lahir dari ${e.induk}${e.mutasi ? ` (mutasi ${e.mutasi.sifat} ${e.mutasi.ubah > 0 ? '+1' : '−1'})` : ''}`;
     case 'mati': return e.sebab === 'dimangsa' ? null : `💀 ${e.nama} milik ${e.pemilik} mati ${e.sebab === 'lapar' ? 'kelaparan' : 'karena jebakan'}`;
     case 'mangsa': return `🦷 ${e.nama} (${e.pemilik}) memangsa ${e.korban} (${e.korban_pemilik})`;
@@ -272,11 +276,28 @@ export function describeEvent(e: any): string | null {
     case 'dijawab': return `💬 Jawaban untuk ${e.pemain}: ${Object.entries(e.rangkum ?? {}).map(([w, k]) => `${String(w).replace('_', ' ')} ×${k}`).join(', ')}`;
     case 'habis_waktu': return `⌛ ${e.pemain} belum menebak — gambarnya ${e.gambar?.emoji ?? ''} ${e.gambar?.nama ?? ''}`;
     case 'ronde_selesai': {
+      if (e.juri !== undefined) return `🤖 ${ringkasRobot(e)}`;
       if (e.cara) return `🏁 Ronde ${e.ronde}: ${e.pemenang} menang (${e.cara === 'habis' ? 'kartu habis' : 'meja buntu'})${e.kali > 1 ? ' ×2 tutup balak!' : ''}`;
       if (e.total != null) return `💰 Gepok ${e.ronde}: totalnya Rp${Number(e.total).toLocaleString('id-ID')}${e.urut?.length ? ` · tercepat ${e.urut.slice(0, 3).join(', ')}` : ' · tidak ada yang benar'}`;
       if (e.rata_ms) return `🎯 Ronde ${e.ronde} selesai: ${Object.entries(e.poin ?? {}).sort((a: any, b: any) => b[1] - a[1]).map(([n, p]) => `${n} ${p}`).join(', ')}`;
       return `🐍 Ronde ${e.ronde} selesai${e.terpanjang ? `, terpanjang ${e.terpanjang} (+5)` : ''}`;
     }
+    // Robot Tarung (benturan/hantam kecil tidak dicatat supaya log tidak banjir; percikannya terlihat di arena)
+    case 'siap': return e.nama_robot ? `🔧 ${e.pemain} siap dengan ${e.nama_robot}${e.bawaan ? ' (rakitan bawaan, waktu garasi habis)' : e.berat ? ` (${e.berat} kg)` : ''}` : null;
+    case 'ke_arena': return `🏟️ Ronde ${e.ronde}: robot masuk arena`;
+    case 'ko': return `💥 KO! ${e.pemain} ${({ hancur: 'hancur', lubang: 'jatuh ke lubang', mogok: 'tidak bergerak 10 detik' } as Record<string, string>)[e.sebab] ?? e.sebab}${e.oleh ? ` (oleh ${e.oleh})` : ''}`;
+    case 'terbang': return e.balik ? `🙃 ${e.pemain} dilempar ${e.oleh} sampai terbalik` : null;
+    case 'tegak': return e.sendiri ? `↻ ${e.pemain} berdiri lagi` : null;
+    case 'palu_arena': return (e.kena ?? []).length ? `🔨 Palu arena menghantam ${(e.kena as string[]).join(', ')}` : null;
+    case 'hantam': return e.kuat >= 18 ? `${({ spinner_h: '🌀', spinner_v: '🥁', flipper: '🦘', palu: '🔨' } as Record<string, string>)[e.senjata] ?? '💢'} ${e.oleh} menghantam ${e.pemain} (${e.sisi}, ${Math.round(e.kuat)})` : null;
+    case 'benturan': case 'ayun': case 'gerus': case 'terbalik': return null;
     default: return null;
   }
+}
+
+function ringkasRobot(e: any): string {
+  const ko = Object.entries(e.ko ?? {}).map(([n, s]) => `${n} ${({ hancur: 'hancur', lubang: 'jatuh ke lubang', mogok: 'mogok' } as Record<string, string>)[String(s)] ?? s}`).join(', ');
+  if (e.cara === 'juri') return `Ronde ${e.ronde}: ${e.pemenang} menang angka juri (${Object.entries(e.juri ?? {}).sort((a: any, b: any) => b[1] - a[1]).map(([n, x]) => `${n} ${x}`).join(' vs ')})`;
+  if (e.cara === 'seri_ko') return `Ronde ${e.ronde}: semua KO, ${e.pemenang} menang karena kerusakan terbanyak`;
+  return `Ronde ${e.ronde}: ${e.pemenang} menang KO dalam ${e.detik} dtk${ko ? ` (${ko})` : ''}`;
 }

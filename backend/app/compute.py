@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import multiprocessing
 import random
+import signal
 import sys
 from concurrent.futures import Executor, ProcessPoolExecutor, ThreadPoolExecutor
 from itertools import combinations
@@ -57,10 +59,20 @@ def compute_tournament(entries: list[tuple[str, str]], settings: dict[str, Any],
     return {"settings": eff.to_dict(), "event": ev, "matches": matches, "standings": standings}
 
 
+def _worker_init() -> None:
+    """Proses pekerja: Ctrl+C cukup ditangani proses utama, SIGTERM menghentikan pekerja seperti biasa."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+
 class MatchRunner:
     def __init__(self, workers: int, max_steps: int):
         self.max_steps = max_steps
-        self.executor: Executor = ProcessPoolExecutor(max_workers=workers) if workers > 0 else ThreadPoolExecutor(max_workers=2)
+        # "spawn", bukan fork: pekerja hasil fork mewarisi socket port server dan penangan sinyal uvicorn, sehingga setelah
+        # server dihentikan pekerja tetap hidup memegang port (server baru gagal: "address already in use").
+        self.executor: Executor = (
+            ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn"), initializer=_worker_init)
+            if workers > 0 else ThreadPoolExecutor(max_workers=2))
 
     async def run(self, entries: list[tuple[str, str]], settings: dict[str, Any]) -> dict[str, Any]:
         loop = asyncio.get_running_loop()
@@ -71,4 +83,11 @@ class MatchRunner:
         return await loop.run_in_executor(self.executor, compute_tournament, entries, settings, self.max_steps)
 
     def shutdown(self) -> None:
-        self.executor.shutdown(wait=False, cancel_futures=True)
+        ex = self.executor
+        # daftar pekerja diambil dulu: shutdown() menghapus referensinya
+        procs = list((getattr(ex, "_processes", None) or {}).values()) if isinstance(ex, ProcessPoolExecutor) else []
+        ex.shutdown(wait=False, cancel_futures=True)
+        # pastikan proses pekerja ikut berhenti (tanpa ini pekerja yang menganggur tertinggal setelah server mati)
+        for proc in procs:
+            if proc.is_alive():
+                proc.terminate()

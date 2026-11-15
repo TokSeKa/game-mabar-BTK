@@ -275,6 +275,9 @@ export function HubRoom({ entry, games, toast, onExit }: Props) {
       sock.current?.wake();
       return;
     }
+    // game real-time: server mengantre perintah tanpa balasan "aksi_ok" (jangan pasang penjaga 5 detik, nanti
+    // sambungan diputus padahal perintahnya sudah dipakai)
+    if (upd.detak) return;
     setActedStep(upd.step);
     window.clearTimeout(ackTimer.current);
     ackTimer.current = window.setTimeout(() => {

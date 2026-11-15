@@ -14,6 +14,8 @@ export function FrameReplay({ frames, meta, names, settings, me = null, kode }: 
   const R = rendererFor(meta.id);
   const last = frames.length - 1;
   const base = meta.kategori === 'tick' ? 350 : meta.kategori === 'mandiri' ? 250 : 900;
+  // game real-time: putar dengan waktu asli (jarak langkah antar frame × lama satu langkah)
+  const tickMs = meta.detak_ms ? (typeof settings.kecepatan === 'number' ? 1000 / settings.kecepatan : meta.detak_ms) : 0;
 
   useEffect(() => {
     if (!playing) return;
@@ -21,9 +23,10 @@ export function FrameReplay({ frames, meta, names, settings, me = null, kode }: 
       setPlaying(false);
       return;
     }
-    const t = window.setTimeout(() => setI((x) => Math.min(last, x + 1)), base / speed);
+    const gap = tickMs ? Math.max(16, ((frames[i + 1]?.step ?? 0) - (frames[i]?.step ?? 0)) * tickMs) : base;
+    const t = window.setTimeout(() => setI((x) => Math.min(last, x + 1)), Math.min(gap, 1500) / speed);
     return () => window.clearTimeout(t);
-  }, [playing, i, last, base, speed]);
+  }, [playing, i, last, base, speed, tickMs, frames]);
 
   const f = frames[Math.min(i, last)];
   const lines = useMemo(() => (f?.events ?? []).map(describeEvent).filter(Boolean) as string[], [f]);

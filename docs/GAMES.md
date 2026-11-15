@@ -4,7 +4,7 @@ Satu server, tiga pintu masuk di halaman depan:
 
 | Pintu | Isi | Alamat |
 |---|---|---|
-| **Arena Mabar** | 21 game main bareng. Setiap kursi boleh manusia atau bot (kecuali game khusus manusia), boleh dicampur. | `#main` |
+| **Arena Mabar** | 22 game main bareng. Setiap kursi boleh manusia atau bot (kecuali game khusus manusia), boleh dicampur. | `#main` |
 | **Suit Bot Arena** | Adu bot batu-gunting-kertas dengan editor blok/Python, replay animasi, turnamen, liga. | `#suit` |
 | **Kilas Pasar** | Simulasi trading dengan candle asli kripto & saham. | `#pasar` |
 
@@ -500,6 +500,26 @@ sah terdekat, **tebakan lawan rahasia** (setelah ronde hanya rata-rata/median, t
   salah mengurangi kesempatan. Selesai saat semua sudah menebak/kalah, atau saat ada satu pemenang (opsi).
 - Gambar: emoji dari 7 kategori bawaan, **isian tambahan** host (emoji + nama + alias), dan **foto yang diunggah host** (diperkecil
   otomatis, disimpan di memori room dan ikut terhapus bersama room). Nama tertentu bisa dibuang dari kategori bawaan.
+
+## 22. Robot Tarung
+
+**2–4 pemain · real-time 20 detak/detik · `def aksi():` · tampilan 3D (Three.js)**
+
+- **Garasi**: rakit robot dalam batas berat (default 100 kg): sasis (kotak / baji / kubah), roda & motor (ringan / sedang / kuat),
+  baterai (kecil / sedang / besar), armor per sisi (depan, kanan, belakang, kiri; 0–8 tingkat), senjata, dan pembalik badan.
+  Pratinjau 3D berputar, 6 contoh rakitan, tombol **Sesuaikan berat**, dan rakitan bisa **disimpan** di browser.
+- **Senjata**: spinner horizontal (terkuat, perlu waktu berputar), drum vertikal (melontarkan, tetap 70% saat terbalik), flipper
+  (melempar dan membalikkan lawan, bisa membalikkan diri sendiri), palu (menembus armor, 2× untuk lawan terbalik), gergaji (menggerus
+  terus), atau tanpa senjata (penyeruduk: tabrakan depan 2× untuk lawan).
+- **Kerusakan per komponen**: armor sisi yang terkena menahan dulu; kalau habis, yang rusak rangka dan komponen di baliknya
+  (depan → senjata, kiri/kanan → motor sisi itu, belakang → baterai). Baji mengangkat roda lawan, kubah memantulkan pukulan samping.
+- **Arena** (12–18 m): lubang di pojok (terbuka setelah 45 detik), gergaji lantai, palu arena, dinding berduri (opsi).
+- **Menang**: KO (rangka hancur, jatuh ke lubang, atau tidak bergerak 10 detik), atau nilai juri saat waktu habis (kerusakan 50%,
+  agresi 25%, kontrol 25%). Poin: menang ronde +10, KO +3, +1 tiap 10 kerusakan.
+- **Kendali**: WASD/panah untuk jalan (gaya tank), Spasi untuk senjata (spinner/gergaji: nyala-mati; flipper/palu: tahan),
+  E untuk berdiri lagi. Di HP: joystick kiri + tombol senjata/balik. Kamera **Arena / Dekat / Ikuti**, dan layar penuh.
+- Fisika berjalan di server (2D dari atas); browser hanya menggambar 3D dan menginterpolasi gerak. Three.js diunduh hanya saat
+  game ini dibuka. Bot: 5 template (drum, gasing, pelempar, godam, buldoser), batas 3.000 langkah kode per detak.
 
 ---
 

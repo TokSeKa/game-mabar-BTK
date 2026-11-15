@@ -23,3 +23,4 @@ File ini dibuat otomatis dari definisi game (`python -m app.games.gen_docs`).
 | Juragan Nusantara (gaya Monopoli) | 2–6 | `def aksi():` | [monopoli.md](monopoli.md) |
 | Domino (Gaple & Draw) | 2–6 | `def aksi():` | [domino.md](domino.md) |
 | Ular Mabar | 1–8 | `def aksi():` | [ular.md](ular.md) |
+| Robot Tarung | 2–4 | `def aksi():` | [robottarung.md](robottarung.md) |

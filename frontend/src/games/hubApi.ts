@@ -57,6 +57,11 @@ export interface GameMeta {
   contoh_kustom?: KartuKustom[];
   /** false: game khusus manusia (tanpa bot) */
   bot?: boolean;
+  /** game real-time: lama satu langkah (ms) */
+  detak_ms?: number | null;
+  /** Robot Tarung: katalog komponen & contoh rakitan */
+  katalog?: any;
+  contoh_rakitan?: any[];
 }
 
 /** Kartu power kustom Satu! (efeknya ditulis dengan kode). */

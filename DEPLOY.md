@@ -1,6 +1,6 @@
 # Deploy Game Mabar BTK ke VPS
 
-Panduan ini untuk VPS Linux (Ubuntu/Debian) yang juga menjalankan proyekmu yang lain. Semua game (Arena Mabar dengan 21 game, Suit Bot Arena,
+Panduan ini untuk VPS Linux (Ubuntu/Debian) yang juga menjalankan proyekmu yang lain. Semua game (Arena Mabar dengan 22 game, Suit Bot Arena,
 dan Kilas Pasar) berjalan sebagai **satu container Docker** bernama `suit-bot-arena` di port lokal (default `127.0.0.1:8080`), lalu dibuka
 ke internet lewat reverse proxy (Nginx atau Caddy) yang mungkin sudah kamu pakai.
 

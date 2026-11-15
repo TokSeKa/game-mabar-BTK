@@ -220,6 +220,8 @@ class Game:
             "jeda_pada": list(self.jeda_pada), "jeda_hasil": self.jeda_hasil, "presets": self.all_presets(),
             "templates": self.templates, "lib_docs": self.all_docs(), "label_skor": self.label_skor,
             "aturan": self.aturan, "format_aksi": self.format_aksi, "bot": self.bot,
+            # game real-time: lama satu langkah (ms) dengan pengaturan bawaan, supaya replay diputar dengan kecepatan asli
+            "detak_ms": round(self.detak(self.clean_settings({})) * 1000) or None,
         }
 
 

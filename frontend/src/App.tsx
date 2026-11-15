@@ -100,7 +100,7 @@ function Portal({ go }: { go: (v: View) => void }) {
         <button type="button" className="game-card mabar" onClick={() => go({ name: 'mabar', route: { page: 'home' } })}>
           <span className="gc-art mabar-art" aria-hidden="true">🂡 🚢 🤖 🃏 🍢 🔨</span>
           <b>Arena Mabar</b>
-          <span>21 game main bareng: poker, kapal, lelang, wordle, labirin, kartu gaya UNO, evolusi, juragan gaya Monopoli, domino, ular, tembak jitu, hitung uang, tebak gambar, dan lainnya. Kursi boleh manusia atau bot, dicampur.</span>
+          <span>22 game main bareng: poker, kapal, robot tarung 3D, lelang, wordle, labirin, kartu gaya UNO, evolusi, juragan gaya Monopoli, domino, ular, tembak jitu, hitung uang, tebak gambar, dan lainnya. Kursi boleh manusia atau bot, dicampur.</span>
         </button>
         <button type="button" className="game-card pasar" onClick={() => go({ name: 'pasar', tab: 'main' })}>
           <span className="gc-art candles" aria-hidden="true">

@@ -15,6 +15,7 @@ from .g_lelang import LelangRahasia
 from .g_monopoli import JuraganNusantara
 from .g_poker import Poker
 from .g_robot import RobotGrid
+from .g_robottarung import RobotTarung
 from .g_satu import Satu
 from .g_suit import SuitLive
 from .g_tebakgambar import TebakGambar
@@ -26,5 +27,5 @@ from .g_wordle import WordleMabar
 GAMES: dict[str, Game] = {g.id: g for g in [
     SuitLive(), Poker(), TenggelamkanKapal(), RobotGrid(), KartuNusantara(), PasarMalamTycoon(), LelangRahasia(),
     RebutanLahan(), KasDesa(), DuaPertiga(), PasarMalamSepi(), WordleMabar(), Labirin(), Satu(), EvolusiHex(), JuraganNusantara(),
-    DominoMabar(), UlarMabar(), TembakJitu(), HitungUang(), TebakGambar(),
+    DominoMabar(), UlarMabar(), TembakJitu(), HitungUang(), TebakGambar(), RobotTarung(),
 ]}
